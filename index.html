@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#CB2A24">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Alzinger · Energie</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --brand:#CB2A24; --brand-ink:#A8211C; --brand-soft:#FCE9E8;
+    --bg:#F3F3F2; --card:#FFFFFF;
+    --ink:#181A1D; --ink-2:#3A3F46;
+    --muted:#737880; --muted-2:#9AA0A6; --line:#ECECEC;
+    --blue:#2F5BD6; --purple:#7C4DD8; --green:#2FA968; --green-soft:#E4F4EA; --gold:#C8881F; --char:#3A3F46;
+    --shadow:0 1px 3px rgba(20,22,26,.04),0 6px 20px rgba(20,22,26,.06);
+    --r:22px; --r-md:18px; --r-sm:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{font-family:'Manrope',system-ui,sans-serif;background:var(--bg);color:var(--ink);
+    line-height:1.45;-webkit-font-smoothing:antialiased;padding-bottom:84px}
+  .num{font-variant-numeric:tabular-nums}
+  .wrap{max-width:760px;margin:0 auto;padding:0 16px}
+
+  /* ---------- App bar ---------- */
+  .appbar{background:var(--brand);color:#fff;position:sticky;top:0;z-index:50}
+  .appbar .inner{max-width:760px;margin:0 auto;padding:14px 16px;display:flex;align-items:center;gap:12px}
+  .logo{display:flex;align-items:center;gap:11px;font-weight:800;font-size:1.5rem;letter-spacing:.06em}
+  .logo svg{width:34px;height:32px;display:block}
+  .appbar .sp{flex:1}
+  .actions{display:flex;align-items:center;gap:9px}
+  .rbtn{width:38px;height:38px;border-radius:50%;border:none;background:rgba(255,255,255,.16);color:#fff;
+    display:grid;place-items:center;cursor:pointer;transition:background .2s,transform .5s}
+  .rbtn:hover{background:rgba(255,255,255,.26)}
+  .rbtn.spin{transform:rotate(360deg)}
+  .ava{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.16);color:#fff;font-weight:700;
+    font-size:.82rem;display:grid;place-items:center;letter-spacing:.04em}
+  .ava.ad{background:rgba(255,255,255,.26)}
+
+  /* ---------- Greeting ---------- */
+  .greet{padding:22px 0 6px}
+  .greet .hi{color:var(--muted);font-weight:600;font-size:1rem;margin-bottom:4px}
+  .greet h1{font-size:clamp(1.6rem,5.4vw,2rem);font-weight:800;line-height:1.12;letter-spacing:-.01em}
+  .greet h1 .r{color:var(--brand)}
+
+  /* ---------- Eyebrow row ---------- */
+  .erow{display:flex;align-items:center;justify-content:space-between;margin:26px 0 12px}
+  .eyebrow{text-transform:uppercase;letter-spacing:.13em;font-size:.74rem;font-weight:700;color:var(--muted)}
+  .erow .ts{font-size:.8rem;font-weight:600;color:var(--muted-2);font-variant-numeric:tabular-nums}
+  .erow .link{color:var(--brand);font-weight:700;font-size:.85rem;cursor:pointer}
+
+  /* ---------- KPI row (momentan) ---------- */
+  .kpirow{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;
+    padding-bottom:4px;-webkit-overflow-scrolling:touch}
+  .kpirow::-webkit-scrollbar{height:0}
+  .kcard{flex:0 0 auto;min-width:208px;background:var(--card);border-radius:var(--r-md);
+    border-left:6px solid var(--ac,var(--brand));box-shadow:var(--shadow);padding:15px 18px;scroll-snap-align:start}
+  .kcard .kl{color:var(--muted);font-weight:600;font-size:.82rem}
+  .kcard hr{border:none;height:1px;background:var(--line);margin:10px 0}
+  .kcard .kn{font-weight:800;font-size:1.95rem;line-height:1;font-variant-numeric:tabular-nums;color:var(--blue)}
+  .kcard .ku{color:var(--muted);font-size:.78rem;margin-top:5px}
+  @media(min-width:720px){.kpirow{display:grid;grid-template-columns:repeat(4,1fr);overflow:visible}.kcard{min-width:0}}
+
+  /* ---------- Cards / sections ---------- */
+  .card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);padding:18px}
+  .card + .card{margin-top:14px}
+  .grid2{display:grid;grid-template-columns:1.1fr .9fr;gap:14px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .ctitle{font-weight:800;font-size:1.05rem;margin-bottom:2px}
+  .chint{font-size:.78rem;color:var(--muted-2);font-weight:600}
+  .chart-box{position:relative;height:300px}
+  .chart-box.tall{height:330px}
+  .chart-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:10px}
+
+  /* legend */
+  .legend{display:flex;flex-wrap:wrap;gap:7px 16px;margin:2px 0 12px;font-size:.78rem;font-weight:600;color:var(--char)}
+  .legend span{display:inline-flex;align-items:center;gap:7px}
+  .legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+  /* plant cards */
+  .plants{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:560px){.plants{grid-template-columns:1fr}}
+  .pcard{background:var(--card);border-radius:var(--r-md);box-shadow:var(--shadow);padding:16px 18px}
+  .pcard .ptop{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px}
+  .pcard .pn{font-weight:800;font-size:1.02rem;display:flex;align-items:center;gap:8px}
+  .pcard .pn .dot{width:9px;height:9px;border-radius:50%}
+  .pcard.voll .pn .dot{background:var(--brand)} .pcard.eigen .pn .dot{background:var(--gold)}
+  .pcard .pkw{font-weight:800;font-variant-numeric:tabular-nums;font-size:1.02rem}
+  .pcard .pkw small{color:var(--muted-2);font-weight:600;font-size:.74rem}
+  .track{height:11px;background:#EFEFEF;border-radius:6px;overflow:hidden}
+  .fill{height:100%;border-radius:6px;transition:width .9s cubic-bezier(.22,1,.36,1)}
+  .pcard.voll .fill{background:var(--brand)} .pcard.eigen .fill{background:var(--gold)}
+  .pcard .pfoot{display:flex;justify-content:space-between;margin-top:9px;font-size:.76rem;color:var(--muted);font-weight:600;font-variant-numeric:tabular-nums}
+
+  /* stat tiles */
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;background:var(--line);
+    border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden}
+  .tile{background:var(--card);padding:13px 14px}
+  .tile .tk{color:var(--muted);font-weight:600;font-size:.78rem;display:flex;align-items:center;gap:7px}
+  .tile .tv{font-weight:800;font-size:1.2rem;margin-top:4px;font-variant-numeric:tabular-nums}
+  .tile .tv small{font-size:.62rem;color:var(--muted);font-weight:600;margin-left:3px}
+  .swatch{width:9px;height:9px;border-radius:2px;display:inline-block}
+  .pos{color:var(--green)} .neg{color:var(--brand)}
+  .pricepill{display:inline-flex;align-items:center;gap:6px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
+    font-size:.68rem;padding:4px 9px;border-radius:20px;margin-top:8px}
+  .pricepill.pos{background:var(--green-soft);color:#176B53} .pricepill.neg{background:var(--brand-soft);color:var(--brand-ink)}
+  .finehint{font-size:.76rem;color:var(--muted);margin-top:11px;line-height:1.55;font-weight:500}
+
+  /* donut */
+  .donutwrap{position:relative;height:188px;margin-bottom:14px}
+  .donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+  .donut-center .big{font-weight:800;font-size:2.3rem;line-height:1;color:var(--green);font-variant-numeric:tabular-nums}
+  .donut-center .cap{font-size:.74rem;color:var(--muted);font-weight:600;margin-top:3px}
+
+  /* table */
+  .tbl{width:100%;border-collapse:collapse;font-size:.9rem}
+  .tbl th{font-weight:700;font-size:.74rem;color:var(--muted);text-align:right;padding:0 12px 10px;
+    border-bottom:1px solid var(--line);text-transform:uppercase;letter-spacing:.04em}
+  .tbl th:first-child{text-align:left}
+  .tbl td{padding:12px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+  .tbl td:first-child{text-align:left;font-weight:700}
+  .tbl tr:last-child td{border-bottom:none}
+  .tbl tr.sum td{background:#FAFAFA;font-weight:800}
+  .pname{display:flex;align-items:center;gap:9px}
+  .pname b{width:9px;height:22px;border-radius:3px;display:inline-block}
+  .pname.voll b{background:var(--brand)} .pname.eigen b{background:var(--gold)}
+  .pname small{display:block;color:var(--muted-2);font-size:.72rem;font-weight:600}
+  .ok{display:inline-flex;align-items:center;gap:7px;font-weight:700;font-size:.82rem;color:var(--green)}
+  .ok i{width:8px;height:8px;border-radius:50%;background:var(--green)}
+  .evtbl td .g{font-weight:700;text-transform:uppercase;letter-spacing:.03em;font-size:.68rem;padding:3px 9px;border-radius:20px}
+  .g.market{background:var(--brand-soft);color:var(--brand-ink)} .g.grid{background:#FBEFD8;color:#7a5512}
+
+  /* bottom tab bar */
+  .tabbar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);z-index:60}
+  .tabbar .inner{max-width:760px;margin:0 auto;display:flex;justify-content:space-around;padding:8px 6px calc(8px + env(safe-area-inset-bottom))}
+  .tab{flex:1;border:none;background:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;
+    color:var(--muted-2);font-family:inherit;font-weight:700;font-size:.7rem;padding:4px}
+  .tab svg{width:23px;height:23px}
+  .tab.active{color:var(--brand)}
+
+  @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header class="appbar">
+  <div class="inner">
+    <div class="logo">
+      <svg viewBox="0 0 40 36" aria-hidden="true"><path d="M20 2 L38 34 H26.5 L20 21 L13.5 34 H2 Z" fill="#fff"/><path d="M20 13 l5.5 10 h-11 z" fill="#CB2A24"/></svg>
+      ALZINGER
+    </div>
+    <div class="sp"></div>
+    <div class="actions">
+      <button class="rbtn" id="refreshBtn" title="Aktualisieren" aria-label="Aktualisieren">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+      </button>
+      <span class="ava">A</span>
+      <span class="ava ad">AD</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap" id="sec-top">
+
+  <section class="greet">
+    <p class="hi" id="hi">Guten Tag</p>
+    <h1 id="head">Anlagen werden geladen …</h1>
+  </section>
+
+  <div class="erow"><span class="eyebrow">Momentan</span><span class="ts num" id="clock">--:--:--</span></div>
+  <div class="kpirow">
+    <div class="kcard" style="--ac:var(--brand)"><div class="kl">Gesamtleistung</div><hr><div class="kn" id="ro-total" style="color:var(--brand)">0</div><div class="ku"><span id="ro-total-sub">0&nbsp;%</span> der Spitze · 950 kWp</div></div>
+    <div class="kcard" style="--ac:var(--blue)"><div class="kl">Verbrauch Werk</div><hr><div class="kn" id="ro-load">0</div><div class="ku">kW · Eigenverbrauchsanlage</div></div>
+    <div class="kcard" style="--ac:var(--purple)"><div class="kl">Einspeisung</div><hr><div class="kn" id="ro-feed" style="color:var(--purple)">0</div><div class="ku">kW netto ins Netz</div></div>
+    <div class="kcard" id="k-spot" style="--ac:var(--green)"><div class="kl">Spotpreis jetzt</div><hr><div class="kn" id="ro-spot" style="color:var(--green)">0</div><div class="ku" id="ro-spot-u">ct/kWh</div></div>
+  </div>
+
+  <div class="erow"><span class="eyebrow">Anlagen jetzt</span></div>
+  <div class="plants">
+    <div class="pcard voll">
+      <div class="ptop"><div class="pn"><span class="dot"></span>Volleinspeiser</div><div class="pkw"><span id="pb-voll-kw">0</span> kW <small>/ 615</small></div></div>
+      <div class="track"><div class="fill" id="pb-voll-fill" style="width:0%"></div></div>
+      <div class="pfoot"><span>Erzeugung = Einspeisung</span><span id="pb-voll-day">heute 0</span></div>
+    </div>
+    <div class="pcard eigen">
+      <div class="ptop"><div class="pn"><span class="dot"></span>Eigenverbrauch</div><div class="pkw"><span id="pb-eigen-kw">0</span> kW <small>/ 335</small></div></div>
+      <div class="track"><div class="fill" id="pb-eigen-fill" style="width:0%"></div></div>
+      <div class="pfoot"><span id="pb-eigen-flow">—</span><span id="pb-eigen-day">heute 0</span></div>
+    </div>
+  </div>
+
+  <!-- Tagesverlauf -->
+  <div class="erow" id="sec-verlauf"><span class="eyebrow">Tagesverlauf</span><span class="chint">heute · 15-Min · kW</span></div>
+  <div class="card">
+    <div class="legend">
+      <span><i style="background:var(--brand)"></i>Volleinspeiser</span>
+      <span><i style="background:var(--gold)"></i>Eigenverbrauch</span>
+      <span><i style="background:var(--char)"></i>Verbrauch (Last)</span>
+    </div>
+    <div class="chart-box tall"><canvas id="chartDay"></canvas></div>
+  </div>
+
+  <!-- Bilanz + Tabelle -->
+  <div class="erow" id="sec-anlagen"><span class="eyebrow">Bilanz &amp; Übersicht</span></div>
+  <div class="grid2">
+    <div class="card">
+      <div class="chart-head"><div class="ctitle">Eigenverbrauch heute</div></div>
+      <div class="donutwrap">
+        <canvas id="chartBilanz"></canvas>
+        <div class="donut-center"><div class="big" id="quote">0&nbsp;%</div><div class="cap">Eigenverbrauchsquote</div></div>
+      </div>
+      <div class="tiles">
+        <div class="tile"><div class="tk"><span class="swatch" style="background:var(--green)"></span>Eigenverbrauch</div><div class="tv" id="b-eigen">0<small>kWh</small></div></div>
+        <div class="tile"><div class="tk"><span class="swatch" style="background:var(--brand)"></span>Einspeisung</div><div class="tv" id="b-feed">0<small>kWh</small></div></div>
+        <div class="tile"><div class="tk"><span class="swatch" style="background:var(--gold)"></span>Netzbezug</div><div class="tv" id="b-bezug">0<small>kWh</small></div></div>
+        <div class="tile"><div class="tk">Autarkiegrad</div><div class="tv" id="autarkie">0<small>%</small></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="chart-head"><div class="ctitle">Anlagenübersicht</div></div>
+      <table class="tbl">
+        <thead><tr><th>Anlage</th><th>Jetzt</th><th>Tag</th><th>Monat</th><th>Jahr</th></tr></thead>
+        <tbody>
+          <tr><td><div class="pname voll"><b></b><span>Volleinspeiser<small>615 kWp</small></span></div></td>
+            <td><span id="t-voll-now">0</span> kW</td><td id="t-voll-day">0</td><td id="t-voll-mon">0</td><td id="t-voll-yr">0</td></tr>
+          <tr><td><div class="pname eigen"><b></b><span>Eigenverbrauch<small>335 kWp</small></span></div></td>
+            <td><span id="t-eigen-now">0</span> kW</td><td id="t-eigen-day">0</td><td id="t-eigen-mon">0</td><td id="t-eigen-yr">0</td></tr>
+          <tr class="sum"><td>Gesamt</td>
+            <td><span id="t-sum-now">0</span> kW</td><td id="t-sum-day">0</td><td id="t-sum-mon">0</td><td id="t-sum-yr">0</td></tr>
+        </tbody>
+      </table>
+      <div style="margin-top:12px"><span class="ok"><i></i>Beide Anlagen normal · keine Störung</span></div>
+    </div>
+  </div>
+
+  <!-- Börsenstrompreis -->
+  <div class="erow" id="sec-boerse"><span class="eyebrow">Börsenstrompreis</span><span class="chint">EPEX Day-Ahead DE-LU · 15-Min</span></div>
+  <div class="card">
+    <div class="tiles" style="margin-bottom:14px">
+      <div class="tile"><div class="tk">Spotpreis jetzt</div><div class="tv" id="sp-now">– <small>ct/kWh</small></div><span class="pricepill" id="sp-pill">—</span></div>
+      <div class="tile"><div class="tk">Negativpreis heute</div><div class="tv" id="sp-neghours">0 <small>Std.</small></div></div>
+      <div class="tile"><div class="tk">Einspeisung bei Negativpreis</div><div class="tv neg" id="sp-negfeed">0 <small>kWh</small></div></div>
+      <div class="tile"><div class="tk">Ø / Min / Max heute</div><div class="tv" id="sp-stats" style="font-size:.95rem">– / – / –</div></div>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--gold)"></i>Einspeisung gesamt (kW)</span>
+      <span><i style="background:var(--blue)"></i>Spotpreis (ct/kWh)</span>
+      <span><i style="background:var(--brand-soft);border:1px solid var(--brand)"></i>Negativpreis-Phase</span>
+    </div>
+    <div class="chart-box tall"><canvas id="chartPrice"></canvas></div>
+    <p class="finehint" id="sp-rule">—</p>
+  </div>
+
+  <!-- Abschaltungen -->
+  <div class="erow"><span class="eyebrow">Abschaltungen &amp; Abregelung</span><span class="chint">30 Tage</span></div>
+  <div class="grid2">
+    <div class="card">
+      <div class="tiles">
+        <div class="tile"><div class="tk">Abschaltungen</div><div class="tv" id="ab-count">0</div></div>
+        <div class="tile"><div class="tk">Gesamtdauer</div><div class="tv" id="ab-hours">0 <small>Std.</small></div></div>
+        <div class="tile"><div class="tk">davon Negativpreis</div><div class="tv neg" id="ab-market">0</div></div>
+        <div class="tile"><div class="tk">davon Netz / Redispatch</div><div class="tv" id="ab-grid" style="color:#7a5512">0</div></div>
+      </div>
+      <div class="chart-box" style="margin-top:14px"><canvas id="chartCurtail"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="chart-head"><div class="ctitle">Letzte Ereignisse</div></div>
+      <table class="tbl evtbl">
+        <thead><tr><th>Datum</th><th>Zeit</th><th>Dauer</th><th>Grund</th><th>kWh</th></tr></thead>
+        <tbody id="ab-rows"></tbody>
+      </table>
+      <p class="finehint">Negativpreis = marktbedingte Abregelung durch den Direktvermarkter (ohne Entschädigung). Netz = Redispatch 2.0 (mit Entschädigungsanspruch).</p>
+    </div>
+  </div>
+
+  <!-- 30 Tage -->
+  <div class="erow"><span class="eyebrow">Energieertrag · 30 Tage</span><span class="chint">kWh / Tag</span></div>
+  <div class="card">
+    <div class="legend"><span><i style="background:var(--brand)"></i>Volleinspeiser</span><span><i style="background:var(--gold)"></i>Eigenverbrauch</span></div>
+    <div class="chart-box"><canvas id="chart30"></canvas></div>
+  </div>
+
+  <!-- 12 Monate -->
+  <div class="erow" id="sec-mehr"><span class="eyebrow">Monatsertrag · 12 Monate</span><span class="chint">MWh / Monat</span></div>
+  <div class="card">
+    <div class="legend"><span><i style="background:var(--brand)"></i>Volleinspeiser</span><span><i style="background:var(--gold)"></i>Eigenverbrauch</span></div>
+    <div class="chart-box"><canvas id="chart12"></canvas></div>
+  </div>
+
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 5&nbsp;Min · <span id="livelabel">Demo</span></p>
+
+</main>
+
+<nav class="tabbar">
+  <div class="inner">
+    <button class="tab active" data-target="sec-top"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Übersicht</button>
+    <button class="tab" data-target="sec-verlauf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 3 5-8 4 5"/></svg>Verlauf</button>
+    <button class="tab" data-target="sec-boerse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>Börse</button>
+    <button class="tab" data-target="sec-anlagen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Anlagen</button>
+    <button class="tab" data-target="sec-mehr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>Mehr</button>
+  </div>
+</nav>
+
+<script>
+/* ============================================================
+   KONFIGURATION
+   ============================================================ */
+const CONFIG = {
+  mode: 'demo',                       // 'demo' | 'supabase'
+  supabaseUrl:     'https://DEIN-PROJEKT.supabase.co',
+  supabaseAnonKey: 'DEIN-ANON-KEY',
+  plants: {
+    voll:  { name:'Volleinspeiser', kwp:615, stationCode:'NE=XXXXXX' },
+    eigen: { name:'Eigenverbrauch', kwp:335, stationCode:'NE=YYYYYY' },
+  }
+};
+
+/* EEG-Negativpreisregel je Anlage – Schwelle hängt vom Inbetriebnahmedatum ab */
+const EEG_RULE = {
+  voll:  { inbetriebnahme:'2024', name:'EEG 2024 · 4-3-2-1-Modell (2026: Nullvergütung ab 2 Std. negativ in Folge)' },
+  eigen: { inbetriebnahme:'2024', name:'EEG 2024 · 4-3-2-1-Modell (2026: Nullvergütung ab 2 Std. negativ in Folge)' },
+};
+
+/* ============================================================
+   FORMAT-HELFER (de-DE)
+   ============================================================ */
+const nf0 = new Intl.NumberFormat('de-DE',{maximumFractionDigits:0});
+const nf1 = new Intl.NumberFormat('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1});
+const fmtKW  = v => nf0.format(Math.round(v));
+const fmtKWh = v => v>=10000 ? nf1.format(v/1000)+' MWh' : nf0.format(v)+' kWh';
+const fmtPct = v => nf0.format(v)+'\u00A0%';
+
+/* ============================================================
+   DEMO-DATEN (deterministisch, sonniger Junitag)
+   ============================================================ */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const rnd = mulberry32(615335);
+const STEP=15, N=Math.floor(24*60/STEP), SUNRISE=5.2, SUNSET=21.2, NOON=13.25;
+
+function pvCurve(peakKW){const out=[];for(let i=0;i<N;i++){const h=i*STEP/60;let p=0;
+  if(h>SUNRISE&&h<SUNSET){const x=(h-NOON)/((SUNSET-SUNRISE)/2);p=peakKW*Math.max(0,Math.cos(x*1.32));p*=0.96+0.08*rnd();if(h>15.4&&h<16.4)p*=0.62+0.18*rnd();}
+  out.push(Math.max(0,p));}return out;}
+function loadCurve(){const out=[];for(let i=0;i<N;i++){const h=i*STEP/60;let l=34;
+  if(h>=6&&h<17.5){l=120+38*Math.sin((h-6)/11.5*Math.PI);if(h>11.8&&h<12.8)l*=0.74;}else if(h>=17.5&&h<20)l=60;l*=0.95+0.1*rnd();out.push(l);}return out;}
+const vollC=pvCurve(530), eigenC=pvCurve(288), loadC=loadCurve();
+function integrate(arr,toIdx){let s=0;const lim=toIdx??arr.length;for(let i=0;i<lim;i++)s+=arr[i]*(STEP/60);return s;}
+
+function daily30(){const a=[];const t=new Date();for(let d=29;d>=0;d--){const date=new Date(t);date.setDate(t.getDate()-d);const w=0.55+0.45*rnd();a.push({date,voll:Math.round(615*6*w),eigen:Math.round(335*6*w)});}return a;}
+function monthly12(){const lbl=['Jul','Aug','Sep','Okt','Nov','Dez','Jan','Feb','Mär','Apr','Mai','Jun'];const sun=[0.92,0.86,0.66,0.44,0.24,0.18,0.22,0.38,0.60,0.82,0.96,1.0];return lbl.map((l,i)=>({label:l,voll:Math.round(615*155*sun[i]),eigen:Math.round(335*155*sun[i])}));}
+
+// Spotpreis ct/kWh je Viertelstunde – PV-Mittagsdelle kippt ins Negative
+function spotCurve(){const p=[];for(let i=0;i<N;i++){const h=i*STEP/60;let c=9+6*Math.sin((h-19)/24*2*Math.PI);
+  if(h>=10.5&&h<=15)c=2.5-7.5*Math.exp(-Math.pow((h-12.9)/1.5,2));c+=(rnd()-0.5)*1.1;p.push(+c.toFixed(2));}return p;}
+const spotC=spotCurve();
+
+// Abschaltungen 30 Tage: market = Negativpreis, grid = Redispatch
+function curtail30(){const t=new Date();const s=[
+  {d:1,from:'12:15',dur:2.5,grund:'market',kwh:1180},{d:3,from:'11:45',dur:3.0,grund:'market',kwh:1520},
+  {d:4,from:'14:30',dur:1.25,grund:'grid',kwh:610},{d:9,from:'12:00',dur:2.0,grund:'market',kwh:980},
+  {d:12,from:'13:15',dur:1.75,grund:'market',kwh:860},{d:15,from:'10:30',dur:0.75,grund:'grid',kwh:300},
+  {d:18,from:'12:30',dur:2.25,grund:'market',kwh:1090},{d:23,from:'11:30',dur:3.5,grund:'market',kwh:1760},
+  {d:26,from:'15:00',dur:1.0,grund:'grid',kwh:420}];
+  return s.map(e=>{const date=new Date(t);date.setDate(t.getDate()-(29-e.d));return {date,from:e.from,dur:e.dur,grund:e.grund,kwh:e.kwh};});}
+
+/* ============================================================
+   DATENSCHICHT
+   ============================================================ */
+const Demo={
+  _start:Date.now(), _simBase:(()=>{const d=new Date();d.setHours(12,47,3,0);return d.getTime();})(),
+  now(){return new Date(this._simBase+(Date.now()-this._start));},
+  idxNow(){const n=this.now();const h=n.getHours()+n.getMinutes()/60;return Math.min(N-1,Math.floor(h*60/STEP));},
+  jit(){return 0.985+0.03*rnd();},
+  snapshot(){
+    const i=this.idxNow(), j=this.jit();
+    const vollKw=vollC[i]*j, pvKw=eigenC[i]*j, loadKw=loadC[i]*(0.98+0.04*rnd());
+    const feedKw=Math.max(0,pvKw-loadKw), gridKw=Math.max(0,loadKw-pvKw);
+    const vollDay=integrate(vollC,i+1), pvDay=integrate(eigenC,i+1), loadDay=integrate(loadC,i+1);
+    let self=0,feed=0,grid=0;
+    for(let k=0;k<=i;k++){const p=eigenC[k],l=loadC[k];self+=Math.min(p,l)*(STEP/60);feed+=Math.max(0,p-l)*(STEP/60);grid+=Math.max(0,l-p)*(STEP/60);}
+    const feedTot=vollC.map((v,k)=>v+Math.max(0,eigenC[k]-loadC[k]));
+    let negH=0,negFeed=0;for(let k=0;k<=i;k++){if(spotC[k]<0){negH+=STEP/60;negFeed+=feedTot[k]*(STEP/60);}}
+    const past=spotC.slice(0,i+1), spAvg=past.reduce((a,b)=>a+b,0)/past.length, spMin=Math.min(...past), spMax=Math.max(...past);
+    return {
+      now:this.now(),
+      voll:{kw:vollKw,day:vollDay,month:84500,year:352000,kwp:615},
+      eigen:{kw:pvKw,load:loadKw,feed:feedKw,grid:gridKw,day:pvDay,month:46000,year:191000,kwp:335,
+             selfKwh:self,feedKwh:feed,gridKwh:grid,loadDay:loadDay,
+             quote:pvDay>0?self/pvDay*100:0,autarkie:loadDay>0?self/loadDay*100:0},
+      curve:{labels:Array.from({length:N},(_,k)=>{const m=k*STEP;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}),
+             voll:vollC,eigen:eigenC,load:loadC,nowIdx:i},
+      daily:daily30(), monthly:monthly12(),
+      spot:{price:spotC,feedTot,now:spotC[i],avg:spAvg,min:spMin,max:spMax,negHours:negH,negFeedKwh:negFeed,rule:EEG_RULE.voll.name},
+      curtail:curtail30()
+    };
+  }
+};
+
+/* ===== Supabase-Datenschicht =====
+   Liest pv_live (aktueller Stand), pv_today (15-Min-Kurve heute),
+   pv_daily / pv_monthly (Historie). Spotpreise live von Energy-Charts.
+   Liefert exakt dieselbe Struktur wie Demo.snapshot(). */
+const Supa = {
+  _hdr(){ return { apikey: CONFIG.supabaseAnonKey, Authorization: 'Bearer ' + CONFIG.supabaseAnonKey }; },
+  async _q(path){
+    const r = await fetch(CONFIG.supabaseUrl + '/rest/v1/' + path, { headers: this._hdr() });
+    if(!r.ok) throw new Error('Supabase ' + r.status + ' bei ' + path);
+    return r.json();
+  },
+  now(){ return new Date(); },
+  async snapshot(){
+    // 1) Aktueller Stand je Anlage (Pflicht – wirft bei Verbindungsproblem -> Demo-Fallback)
+    const live = await this._q('pv_live?select=plant,p_kw,load_kw,feed_kw,grid_kw,total_kwh,ts');
+    const L = {}; live.forEach(r => L[r.plant] = r);
+    const v = L.voll || {}, e = L.eigen || {};
+
+    // 2) Heutige 15-Minuten-Kurve (max. 96 Punkte je Anlage)
+    const today = await this._q('pv_today?select=plant,slot,p_kw,load_kw,feed_kw,grid_kw').catch(() => []);
+    const vollC = new Array(N).fill(0), eigenC = new Array(N).fill(0), loadC = new Array(N).fill(0);
+    const feedC = new Array(N).fill(0), gridC = new Array(N).fill(0);
+    let maxIdx = 0;
+    today.forEach(r => {
+      const m = /T(\d\d):(\d\d)/.exec(r.slot); if(!m) return;
+      const idx = (+m[1]) * 4 + Math.floor((+m[2]) / 15); if(idx < 0 || idx >= N) return;
+      if(idx > maxIdx) maxIdx = idx;
+      if(r.plant === 'voll'){ vollC[idx] = r.p_kw || 0; }
+      else if(r.plant === 'eigen'){ eigenC[idx] = r.p_kw || 0; loadC[idx] = r.load_kw || 0; feedC[idx] = r.feed_kw || 0; gridC[idx] = r.grid_kw || 0; }
+    });
+    const now = new Date();
+    const nowIdx = Math.min(N - 1, Math.max(maxIdx, now.getHours() * 4 + Math.floor(now.getMinutes() / 15)));
+
+    // Intraday-Energien (kWh) aus den 15-Min-Mitteln
+    const Hh = STEP / 60;
+    let selfKwh = 0, feedKwh = 0, gridKwh = 0, loadDay = 0, eigenDay = 0, vollDay = 0;
+    for(let k = 0; k <= nowIdx; k++){
+      vollDay += vollC[k] * Hh; eigenDay += eigenC[k] * Hh; loadDay += loadC[k] * Hh;
+      feedKwh += feedC[k] * Hh; gridKwh += gridC[k] * Hh;
+      selfKwh += Math.max(0, Math.min(eigenC[k], loadC[k])) * Hh;
+    }
+
+    // 3) Tages- und Monatsenergie (30-Tage / 12-Monate / Monat / Jahr)
+    const daily   = await this._q('pv_daily?select=plant,tag,gen_kwh&order=tag.asc').catch(() => []);
+    const monthly = await this._q('pv_monthly?select=plant,monat,gen_kwh&order=monat.asc').catch(() => []);
+
+    const dmap = {};
+    daily.forEach(r => { const o = dmap[r.tag] = dmap[r.tag] || { date: new Date(r.tag + 'T12:00:00'), voll: 0, eigen: 0 }; o[r.plant] = Math.round(r.gen_kwh || 0); });
+    const dailyArr = Object.keys(dmap).sort().slice(-30).map(k => dmap[k]);
+
+    const MON = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+    const mmap = {};
+    monthly.forEach(r => { const o = mmap[r.monat] = mmap[r.monat] || { label: MON[(+r.monat.slice(5,7)) - 1] || r.monat, voll: 0, eigen: 0 }; o[r.plant] = Math.round(r.gen_kwh || 0); });
+    const monthlyArr = Object.keys(mmap).sort().slice(-12).map(k => mmap[k]);
+
+    const pad = n => String(n).padStart(2,'0');
+    const todayKey = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+    const curMon = todayKey.slice(0,7), curYr = String(now.getFullYear());
+    const sumMon = p => monthly.filter(r => r.plant === p && r.monat === curMon).reduce((a,b) => a + (b.gen_kwh || 0), 0);
+    const sumYr  = p => monthly.filter(r => r.plant === p && r.monat.startsWith(curYr)).reduce((a,b) => a + (b.gen_kwh || 0), 0);
+    const dayDB  = p => { const r = daily.find(x => x.plant === p && x.tag === todayKey); return r ? r.gen_kwh : null; };
+    const vDay = dayDB('voll')  != null ? dayDB('voll')  : vollDay;
+    const eDay = dayDB('eigen') != null ? dayDB('eigen') : eigenDay;
+
+    // 4) Börsenpreise live (Energy-Charts) + Einspeise-Summenkurve
+    let price = new Array(N).fill(0);
+    try { const sp = await fetchSpotPricesDELU(now); if(sp && sp.length) for(let k = 0; k < N; k++) price[k] = (sp[k] != null) ? sp[k] : (k > 0 ? price[k-1] : 0); } catch(_){}
+    const feedTot = vollC.map((x,k) => x + Math.max(0, eigenC[k] - loadC[k]));
+    const past = price.slice(0, nowIdx + 1);
+    const spAvg = past.length ? past.reduce((a,b) => a + b, 0) / past.length : 0;
+    const spMin = past.length ? Math.min(...past) : 0, spMax = past.length ? Math.max(...past) : 0;
+    let negH = 0, negFeed = 0; for(let k = 0; k <= nowIdx; k++){ if(price[k] < 0){ negH += Hh; negFeed += feedTot[k] * Hh; } }
+
+    return {
+      now,
+      voll:  { kw: v.p_kw || 0, day: vDay, month: sumMon('voll'), year: sumYr('voll'), kwp: CONFIG.plants.voll.kwp },
+      eigen: { kw: e.p_kw || 0, load: e.load_kw || 0, feed: e.feed_kw || 0, grid: e.grid_kw || 0,
+               day: eDay, month: sumMon('eigen'), year: sumYr('eigen'), kwp: CONFIG.plants.eigen.kwp,
+               selfKwh, feedKwh, gridKwh, loadDay,
+               quote: eDay > 0 ? selfKwh / eDay * 100 : 0, autarkie: loadDay > 0 ? selfKwh / loadDay * 100 : 0 },
+      curve: { labels: Array.from({ length: N }, (_, k) => { const mm = k * STEP; return String(Math.floor(mm/60)).padStart(2,'0') + ':' + String(mm%60).padStart(2,'0'); }),
+               voll: vollC, eigen: eigenC, load: loadC, nowIdx },
+      daily: dailyArr,
+      monthly: monthlyArr,
+      spot: { price, feedTot, now: price[nowIdx] || 0, avg: spAvg, min: spMin, max: spMax, negHours: negH, negFeedKwh: negFeed, rule: EEG_RULE.voll.name },
+      curtail: []
+    };
+  }
+};
+const Source = CONFIG.mode==='supabase' ? Supa : Demo;
+
+/* Börsenpreise live (DE-LU, 15-Min, kostenlos, ohne Key) – Energy-Charts (Fraunhofer ISE).
+   Rückgabe ct/kWh je Viertelstunde. Zum Aktivieren in snapshot() spotC ersetzen. */
+async function fetchSpotPricesDELU(date=new Date()){
+  const d=date.toISOString().slice(0,10);
+  const url=`https://api.energy-charts.info/price?bzn=DE-LU&start=${d}T00:00+02:00&end=${d}T23:45+02:00`;
+  const j=await (await fetch(url)).json();
+  return (j.price||[]).map(p=>+(p/10).toFixed(2));
+}
+// Alternative ohne Key: aWATTar  https://api.awattar.de/v1/marketdata  (Feld 'marketprice' €/MWh)
+
+/* ============================================================
+   CHARTS
+   ============================================================ */
+Chart.defaults.font.family="'Manrope',sans-serif";
+Chart.defaults.font.size=11; Chart.defaults.font.weight='600'; Chart.defaults.color='#737880';
+const GRID='rgba(24,26,29,.06)';
+const axM=u=>({grid:{color:GRID,drawBorder:false},border:{display:false},ticks:{callback:v=>nf0.format(v),maxTicksLimit:6},title:{display:!!u,text:u,color:'#9AA0A6'}});
+const tipNum=suf=>({callbacks:{label:c=>c.dataset.label+': '+nf0.format(c.parsed.y)+' '+suf}});
+const RED='#CB2A24', GOLD='#C8881F', CHAR='#3A3F46', BLUE='#2F5BD6', GREEN='#2FA968';
+let cDay,cBil,c30,c12,cPrice,cCurtail;
+
+function buildCharts(s){
+  cDay=new Chart(document.getElementById('chartDay'),{type:'line',
+    data:{labels:s.curve.labels,datasets:[
+      {label:'Volleinspeiser',data:s.curve.voll,borderColor:RED,backgroundColor:'rgba(203,42,36,.10)',fill:true,tension:.4,pointRadius:0,borderWidth:2.4},
+      {label:'Eigenverbrauch',data:s.curve.eigen,borderColor:GOLD,backgroundColor:'rgba(200,136,31,.10)',fill:true,tension:.4,pointRadius:0,borderWidth:2.4},
+      {label:'Verbrauch',data:s.curve.load,borderColor:CHAR,borderDash:[5,4],fill:false,tension:.35,pointRadius:0,borderWidth:1.6},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:tipNum('kW')},
+      scales:{x:{grid:{display:false},border:{display:false},ticks:{maxTicksLimit:9}},y:axM('kW')}}});
+
+  cBil=new Chart(document.getElementById('chartBilanz'),{type:'doughnut',
+    data:{labels:['Eigenverbrauch','Einspeisung'],datasets:[{data:[s.eigen.selfKwh,s.eigen.feedKwh],
+      backgroundColor:[GREEN,RED],borderColor:'#fff',borderWidth:3}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'72%',
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.label+': '+fmtKWh(c.parsed)}}}}});
+
+  c30=new Chart(document.getElementById('chart30'),{type:'bar',
+    data:{labels:s.daily.map(d=>d.date.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})),
+      datasets:[{label:'Volleinspeiser',data:s.daily.map(d=>d.voll),backgroundColor:RED,borderRadius:3},
+                {label:'Eigenverbrauch',data:s.daily.map(d=>d.eigen),backgroundColor:GOLD,borderRadius:3}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:tipNum('kWh')},
+      scales:{x:{stacked:true,grid:{display:false},border:{display:false},ticks:{maxTicksLimit:10}},y:{stacked:true,...axM('kWh')}}}});
+
+  c12=new Chart(document.getElementById('chart12'),{type:'bar',
+    data:{labels:s.monthly.map(m=>m.label),datasets:[
+      {label:'Volleinspeiser',data:s.monthly.map(m=>+(m.voll/1000).toFixed(1)),backgroundColor:RED,borderRadius:3},
+      {label:'Eigenverbrauch',data:s.monthly.map(m=>+(m.eigen/1000).toFixed(1)),backgroundColor:GOLD,borderRadius:3}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.label+': '+nf1.format(c.parsed.y)+' MWh'}}},
+      scales:{x:{grid:{display:false},border:{display:false}},y:{...axM('MWh')}}}});
+
+  // Börsenpreis vs Einspeisung – mit Negativpreis-Bändern
+  const negBands={id:'negBands',beforeDatasetsDraw(ch){const sp=ch.$spot;if(!sp||!ch.chartArea)return;
+    const {ctx,chartArea:a,scales:{x}}=ch;const w=x.getPixelForValue(1)-x.getPixelForValue(0);
+    ctx.save();ctx.fillStyle='rgba(203,42,36,.12)';
+    for(let k=0;k<sp.price.length;k++){if(sp.price[k]<0)ctx.fillRect(x.getPixelForValue(k)-w/2,a.top,w,a.bottom-a.top);}ctx.restore();}};
+  cPrice=new Chart(document.getElementById('chartPrice'),{type:'line',
+    data:{labels:s.curve.labels,datasets:[
+      {label:'Einspeisung',data:s.spot.feedTot,yAxisID:'y',borderColor:GOLD,backgroundColor:'rgba(200,136,31,.14)',fill:true,tension:.4,pointRadius:0,borderWidth:2.2},
+      {label:'Spotpreis',data:s.spot.price,yAxisID:'y1',borderColor:BLUE,fill:false,tension:.3,pointRadius:0,borderWidth:2.2}]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.yAxisID==='y1'?c.dataset.label+': '+nf1.format(c.parsed.y)+' ct/kWh':c.dataset.label+': '+nf0.format(c.parsed.y)+' kW'}}},
+      scales:{x:{grid:{display:false},border:{display:false},ticks:{maxTicksLimit:9}},
+              y:{position:'left',...axM('kW')},
+              y1:{position:'right',grid:{drawOnChartArea:false},border:{display:false},title:{display:true,text:'ct/kWh',color:BLUE},ticks:{callback:v=>nf0.format(v),color:BLUE}}}},
+    plugins:[negBands]});
+  cPrice.$spot=s.spot; cPrice.update('none');
+
+  // Abregelung 30 Tage (gestapelt)
+  const fmtD=e=>e.date.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'});
+  const days=[...new Set(s.curtail.map(fmtD))];
+  const byDay=g=>days.map(d=>s.curtail.filter(e=>fmtD(e)===d&&e.grund===g).reduce((a,e)=>a+e.dur,0));
+  cCurtail=new Chart(document.getElementById('chartCurtail'),{type:'bar',
+    data:{labels:days,datasets:[
+      {label:'Negativpreis',data:byDay('market'),backgroundColor:RED,borderRadius:3},
+      {label:'Netz/Redispatch',data:byDay('grid'),backgroundColor:GOLD,borderRadius:3}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.label+': '+nf1.format(c.parsed.y)+' h'}}},
+      scales:{x:{stacked:true,grid:{display:false},border:{display:false}},y:{stacked:true,...axM('Std.')}}}});
+}
+
+/* ============================================================
+   ANZEIGE
+   ============================================================ */
+function countUp(el,target,dur=900){const start=performance.now();const from=parseFloat(el.dataset.v||'0')||0;
+  function step(t){const p=Math.min(1,(t-start)/dur);const e=1-Math.pow(1-p,3);el.textContent=fmtKW(from+(target-from)*e);
+    if(p<1)requestAnimationFrame(step);else{el.textContent=fmtKW(target);el.dataset.v=target;}}requestAnimationFrame(step);}
+
+function greeting(h){return h<11?'Guten Morgen':h<17?'Guten Tag':h<22?'Guten Abend':'Gute Nacht';}
+function headline(s){const tot=s.voll.kw+s.eigen.kw, peak=s.voll.kwp+s.eigen.kwp;
+  if(s.spot&&s.spot.now<0&&s.spot.feedTot[s.curve.nowIdx]>1) return 'Achtung: <span class="r">Negativpreis</span> bei Einspeisung.';
+  if(tot<peak*0.03) return 'Anlagen aktuell <span class="r">im Standby</span>.';
+  if(tot>=peak*0.4) return 'Beide Anlagen <span class="r">speisen ein</span>.';
+  return 'Aktuell <span class="r">'+fmtKW(tot)+'&nbsp;kW</span> Erzeugung.';}
+
+function paint(s,first){
+  const total=s.voll.kw+s.eigen.kw, peak=s.voll.kwp+s.eigen.kwp;
+  const h=s.now.getHours()+s.now.getMinutes()/60;
+  document.getElementById('hi').textContent=greeting(h);
+  document.getElementById('head').innerHTML=headline(s);
+
+  if(first){countUp(document.getElementById('ro-total'),total);countUp(document.getElementById('ro-load'),s.eigen.load);countUp(document.getElementById('ro-feed'),s.eigen.feed);}
+  else{document.getElementById('ro-total').textContent=fmtKW(total);document.getElementById('ro-load').textContent=fmtKW(s.eigen.load);document.getElementById('ro-feed').textContent=fmtKW(s.eigen.feed);}
+  document.getElementById('ro-total-sub').textContent=fmtPct(total/peak*100);
+
+  // Spotpreis-KPI (Akzent nach Vorzeichen)
+  if(s.spot){const neg=s.spot.now<0;const col=neg?'var(--brand)':'var(--green)';
+    document.getElementById('ro-spot').textContent=nf1.format(s.spot.now);
+    document.getElementById('ro-spot').style.color=col;
+    document.getElementById('k-spot').style.setProperty('--ac',col);
+    document.getElementById('ro-spot-u').textContent=neg?'ct/kWh · keine Vergütung':'ct/kWh';}
+
+  // Plant cards
+  document.getElementById('pb-voll-kw').textContent=fmtKW(s.voll.kw);
+  document.getElementById('pb-eigen-kw').textContent=fmtKW(s.eigen.kw);
+  document.getElementById('pb-voll-fill').style.width=(s.voll.kw/s.voll.kwp*100)+'%';
+  document.getElementById('pb-eigen-fill').style.width=(s.eigen.kw/s.eigen.kwp*100)+'%';
+  document.getElementById('pb-voll-day').textContent='heute '+fmtKWh(s.voll.day);
+  document.getElementById('pb-eigen-day').textContent='heute '+fmtKWh(s.eigen.day);
+  document.getElementById('pb-eigen-flow').textContent=s.eigen.feed>1?'↑ '+fmtKW(s.eigen.feed)+' kW ins Netz':'↓ '+fmtKW(s.eigen.grid)+' kW aus Netz';
+
+  // Bilanz
+  document.getElementById('quote').innerHTML=fmtPct(s.eigen.quote);
+  document.getElementById('autarkie').innerHTML=nf0.format(s.eigen.autarkie)+'<small>%</small>';
+  document.getElementById('b-eigen').innerHTML=nf0.format(s.eigen.selfKwh)+'<small>kWh</small>';
+  document.getElementById('b-feed').innerHTML=nf0.format(s.eigen.feedKwh)+'<small>kWh</small>';
+  document.getElementById('b-bezug').innerHTML=nf0.format(s.eigen.gridKwh)+'<small>kWh</small>';
+
+  // Tabelle
+  const set=(id,v)=>document.getElementById(id).textContent=v;
+  set('t-voll-now',fmtKW(s.voll.kw));set('t-voll-day',fmtKWh(s.voll.day));set('t-voll-mon',fmtKWh(s.voll.month));set('t-voll-yr',fmtKWh(s.voll.year));
+  set('t-eigen-now',fmtKW(s.eigen.kw));set('t-eigen-day',fmtKWh(s.eigen.day));set('t-eigen-mon',fmtKWh(s.eigen.month));set('t-eigen-yr',fmtKWh(s.eigen.year));
+  set('t-sum-now',fmtKW(total));set('t-sum-day',fmtKWh(s.voll.day+s.eigen.day));set('t-sum-mon',fmtKWh(s.voll.month+s.eigen.month));set('t-sum-yr',fmtKWh(s.voll.year+s.eigen.year));
+
+  // Börsenstrompreis
+  if(s.spot){const sp=s.spot, neg=sp.now<0;
+    document.getElementById('sp-now').innerHTML=nf1.format(sp.now)+' <small>ct/kWh</small>';
+    document.getElementById('sp-now').className='tv '+(neg?'neg':'pos');
+    const pill=document.getElementById('sp-pill');pill.textContent=neg?'negativ · keine Vergütung':'positiv';pill.className='pricepill '+(neg?'neg':'pos');
+    document.getElementById('sp-neghours').innerHTML=nf1.format(sp.negHours)+' <small>Std.</small>';
+    document.getElementById('sp-negfeed').innerHTML=nf0.format(sp.negFeedKwh)+' <small>kWh</small>';
+    document.getElementById('sp-stats').textContent=nf1.format(sp.avg)+' / '+nf1.format(sp.min)+' / '+nf1.format(sp.max)+' ct';
+    document.getElementById('sp-rule').textContent='Regel je Anlage: '+sp.rule+'. In Negativpreis-Phasen entfällt die Marktprämie — die '+nf0.format(sp.negFeedKwh)+' kWh Einspeisung in diesen Phasen wurden ohne Vergütung eingespeist.';}
+
+  // Abschaltungen
+  if(s.curtail){const ev=s.curtail, hrs=ev.reduce((a,e)=>a+e.dur,0);
+    const mkt=ev.filter(e=>e.grund==='market'), grd=ev.filter(e=>e.grund==='grid');
+    document.getElementById('ab-count').textContent=ev.length;
+    document.getElementById('ab-hours').innerHTML=nf1.format(hrs)+' <small>Std.</small>';
+    document.getElementById('ab-market').textContent=mkt.length+' · '+nf1.format(mkt.reduce((a,e)=>a+e.dur,0))+' h';
+    document.getElementById('ab-grid').textContent=grd.length+' · '+nf1.format(grd.reduce((a,e)=>a+e.dur,0))+' h';
+    document.getElementById('ab-rows').innerHTML=ev.slice().reverse().slice(0,8).map(e=>{
+      const [hh,mm]=e.from.split(':').map(Number);const tm=hh*60+mm+e.dur*60;
+      const end=String(Math.floor(tm/60)%24).padStart(2,'0')+':'+String(Math.round(tm%60)).padStart(2,'0');
+      const g=e.grund==='market'?'<span class="g market">Negativpreis</span>':'<span class="g grid">Netz</span>';
+      return `<tr><td>${e.date.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}</td><td>${e.from}–${end}</td><td>${nf1.format(e.dur)} h</td><td>${g}</td><td>${nf0.format(e.kwh)}</td></tr>`;
+    }).join('');}
+
+  if(CONFIG.mode==='supabase'){document.getElementById('srcbadge').textContent='Supabase · live';document.getElementById('livelabel').textContent='Live';}
+}
+
+function tickClock(){const n=Source.now?Source.now():new Date();document.getElementById('clock').textContent=n.toLocaleTimeString('de-DE',{hour12:false});}
+
+async function refresh(){const b=document.getElementById('refreshBtn');b.classList.add('spin');setTimeout(()=>b.classList.remove('spin'),550);
+  let u;try{u=await Source.snapshot();}catch(_){u=await Demo.snapshot();}paint(u,false);}
+
+/* Tab-Leiste: sanftes Scrollen zu den Abschnitten */
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');
+  const el=document.getElementById(t.dataset.target);if(el)window.scrollTo({top:el.getBoundingClientRect().top+window.scrollY-72,behavior:'smooth'});}));
+document.getElementById('refreshBtn').addEventListener('click',refresh);
+
+/* ============================================================
+   START
+   ============================================================ */
+async function start(){
+  let s;try{s=await Source.snapshot();}catch(e){document.getElementById('livelabel').textContent='Demo';s=await Demo.snapshot();}
+  buildCharts(s);paint(s,true);
+  setInterval(tickClock,1000);tickClock();
+  const every=CONFIG.mode==='supabase'?300000:3000;
+  setInterval(async()=>{let u;try{u=await Source.snapshot();}catch(_){u=await Demo.snapshot();}paint(u,false);
+    if(CONFIG.mode==='supabase'){cDay.data.datasets[0].data=u.curve.voll;cDay.data.datasets[1].data=u.curve.eigen;cDay.data.datasets[2].data=u.curve.load;cDay.update('none');}},every);
+}
+start();
+</script>
+</body>
+</html>
