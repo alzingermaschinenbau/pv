@@ -3,6 +3,10 @@
 Liest beide SmartLogger 3000 per **Modbus TCP** und schreibt die Werte nach
 Supabase. Läuft als Dauerprozess auf einem Rechner mit Zugang zum Logger-Netz.
 
+> **Auf einem NAS (Synology/QNAP)?** Empfohlener Weg – siehe **[SYNOLOGY.md](SYNOLOGY.md)**
+> (läuft als Docker-Container, startet automatisch wieder). Windows: Doppelklick
+> auf `start_windows.bat`.
+
 ## Einrichtung
 
 ```bash
