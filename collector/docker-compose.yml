@@ -18,6 +18,13 @@ services:
       # Falls die Logger-IPs abweichen, hier setzen:
       # - LOGGER_VOLL_HOST=192.168.100.22
       # - LOGGER_EIGEN_HOST=192.168.100.12
+      # Optional: Zähler-kWh-Stände mitspeichern (Register erst gegen WebUI prüfen):
+      # - METER_IMPORT_REG=
+      # - METER_EXPORT_REG=
+      # - METER_ENERGY_TYPE=u32
+      # - METER_ENERGY_GAIN=100
+      # Diagnose zum Finden der Register (danach wieder entfernen):
+      # - METER_SCAN=32278:40
 
 # Alternative ohne fertiges Image (selbst bauen): obige Zeile "image:" durch
 #   build: .
