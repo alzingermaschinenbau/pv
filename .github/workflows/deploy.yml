@@ -1,0 +1,43 @@
+name: Deploy zu GitHub Pages
+
+# Deployt die statische Single-File-App (index.html) bei jedem Push auf main.
+# Einmalige Einrichtung: Repo -> Settings -> Pages -> "Build and deployment" ->
+# Source auf "GitHub Actions" stellen. Danach laeuft der Deploy automatisch.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Rechte, die der Deploy-Job braucht
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Immer nur ein Deploy gleichzeitig; laufende werden nicht abgebrochen.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Pages konfigurieren
+        uses: actions/configure-pages@v5
+
+      - name: Artefakt hochladen (gesamtes Repo-Root)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
