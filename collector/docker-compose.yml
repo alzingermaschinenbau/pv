@@ -1,17 +1,25 @@
 # PV-Collector als Container (Synology Container Manager / QNAP Container Station).
-# Liest den geheimen Key aus der Datei .env im selben Ordner.
-# Start:   docker compose up -d        (oder im Container Manager als "Projekt")
+# Nutzt das fertige Image aus der GitHub Container Registry – es muss auf dem
+# NAS nichts gebaut werden.
+#
+# Den geheimen Key entweder in einer Datei .env daneben (SUPABASE_SERVICE_KEY=...)
+# bereitstellen ODER unten direkt bei environment eintragen.
 
 services:
   pv-collector:
-    build: .
+    image: ghcr.io/alzingermaschinenbau/pv-collector:latest
     container_name: pv-collector
     restart: unless-stopped        # startet nach Reboot/Stromausfall automatisch
-    env_file:
-      - .env                       # enthält SUPABASE_SERVICE_KEY (geheim, nicht im Repo)
     environment:
       - SUPABASE_URL=https://tppwuvizobwnnfatysdh.supabase.co
       - POLL_SECONDS=60
+      # Geheimen Key hier eintragen (sb_secret_...) ODER per .env bereitstellen:
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
       # Falls die Logger-IPs abweichen, hier setzen:
       # - LOGGER_VOLL_HOST=192.168.100.22
       # - LOGGER_EIGEN_HOST=192.168.100.12
+
+# Alternative ohne fertiges Image (selbst bauen): obige Zeile "image:" durch
+#   build: .
+# ersetzen und die Quelldateien (collector.py, requirements.txt, Dockerfile)
+# in denselben Ordner legen.

@@ -3,9 +3,16 @@
 Liest beide SmartLogger 3000 per **Modbus TCP** und schreibt die Werte nach
 Supabase. Läuft als Dauerprozess auf einem Rechner mit Zugang zum Logger-Netz.
 
-> **Auf einem NAS (Synology/QNAP)?** Empfohlener Weg – siehe **[SYNOLOGY.md](SYNOLOGY.md)**
-> (läuft als Docker-Container, startet automatisch wieder). Windows: Doppelklick
-> auf `start_windows.bat`.
+> **Auf einem NAS?** Empfohlener Weg (läuft als Docker-Container, startet
+> automatisch wieder, nichts zu bauen):
+> **[QNAP-Anleitung](QNAP.md)** · **[Synology-Anleitung](SYNOLOGY.md)**.
+> Windows: Doppelklick auf `start_windows.bat`.
+>
+> Einmalig nötig: Das fertige Image wird per GitHub Actions nach
+> `ghcr.io/alzingermaschinenbau/pv-collector` veröffentlicht. Damit das NAS es
+> ohne Anmeldung laden kann, das Paket einmal auf **public** stellen:
+> GitHub → Profil/Repo → **Packages** → `pv-collector` → **Package settings** →
+> **Change visibility → Public**.
 
 ## Einrichtung
 
