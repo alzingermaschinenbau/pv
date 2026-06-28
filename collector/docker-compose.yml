@@ -1,0 +1,17 @@
+# PV-Collector als Container (Synology Container Manager / QNAP Container Station).
+# Liest den geheimen Key aus der Datei .env im selben Ordner.
+# Start:   docker compose up -d        (oder im Container Manager als "Projekt")
+
+services:
+  pv-collector:
+    build: .
+    container_name: pv-collector
+    restart: unless-stopped        # startet nach Reboot/Stromausfall automatisch
+    env_file:
+      - .env                       # enthält SUPABASE_SERVICE_KEY (geheim, nicht im Repo)
+    environment:
+      - SUPABASE_URL=https://tppwuvizobwnnfatysdh.supabase.co
+      - POLL_SECONDS=60
+      # Falls die Logger-IPs abweichen, hier setzen:
+      # - LOGGER_VOLL_HOST=192.168.100.22
+      # - LOGGER_EIGEN_HOST=192.168.100.12
