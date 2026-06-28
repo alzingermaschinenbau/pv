@@ -1,0 +1,9 @@
+# Geheimnisse – niemals committen
+.env
+collector/.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

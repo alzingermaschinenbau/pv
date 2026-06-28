@@ -1,0 +1,227 @@
+#!/usr/bin/env python3
+# ============================================================
+#  Alzinger PV-Monitoring · Datensammler (Modbus TCP -> Supabase)
+# ============================================================
+#  Liest beide SmartLogger 3000 per Modbus TCP (Port 502,
+#  Adressmodus "Kommunikationsadresse"), aggregiert je Anlage und
+#  schreibt mit dem service_role-Key nach Supabase:
+#    - pv_live     (Upsert auf plant = aktueller Stand)
+#    - pv_samples  (Insert = Zeitreihe)
+#
+#  Läuft als Dauerprozess auf einem Rechner mit Zugang zum Logger-Netz.
+#  Eine Direktvermarktungs-Box liest dieselben Logger parallel (nur Web) –
+#  diese hier nutzt nur Modbus/502 und stört den DVM-Zugriff nicht.
+#
+#  Konfiguration über Umgebungsvariablen (siehe .env.example):
+#    SUPABASE_URL          z.B. https://xxxx.supabase.co
+#    SUPABASE_SERVICE_KEY  service_role ODER sb_secret_... (GEHEIM!)
+#    POLL_SECONDS          Abtastintervall (Default 60)
+#  Optional pro Anlage überschreibbar:
+#    LOGGER_VOLL_HOST / LOGGER_EIGEN_HOST
+# ============================================================
+
+import os
+import sys
+import time
+import struct
+import datetime as dt
+
+import requests
+
+# .env automatisch laden, falls python-dotenv installiert ist
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+except ImportError:
+    pass
+
+try:
+    from pymodbus.client import ModbusTcpClient
+except ImportError:
+    sys.exit("pymodbus fehlt – bitte 'pip install -r requirements.txt' ausführen.")
+
+
+# ---------- Anlagen-Konfiguration ----------
+# Wechselrichter-Slave-IDs und Logger-Hosts laut Anlagendoku.
+PLANTS = {
+    "voll": {
+        "host": os.getenv("LOGGER_VOLL_HOST", "192.168.100.22"),
+        "inverters": [12, 13, 14, 15, 16, 17, 18, 19, 20, 21],  # 10 WR
+        "meter": None,                                          # kein Zähler
+    },
+    "eigen": {
+        "host": os.getenv("LOGGER_EIGEN_HOST", "192.168.100.12"),
+        "inverters": [12, 13, 14, 15, 16, 20],                  # 6 WR
+        "meter": 11,                                            # Messgeraet_NAP
+    },
+}
+
+PORT = 502
+
+# Modbus-Register (Kommunikationsadresse), Funktionscode 03 (Holding).
+REG_WR_POWER  = 32080   # Wirkleistung Wechselrichter, i32, /1000 -> kW
+REG_WR_TOTAL  = 32114   # Gesamtertrag,                u32, /100  -> kWh
+REG_METER_PWR = 32278   # Wirkleistung Zähler, i32, W; >0 Netzbezug, <0 Einspeisung
+
+POLL_SECONDS = int(os.getenv("POLL_SECONDS", "60"))
+MODBUS_TIMEOUT = 5
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+
+
+# ---------- Modbus-Decoder ----------
+def _read_regs(client, slave, address, count):
+    """Liest 'count' Holding-Register. Gibt Liste oder None bei Fehler."""
+    try:
+        rr = client.read_holding_registers(address, count=count, slave=slave)
+    except Exception as e:                       # noqa: BLE001
+        print(f"  ! Modbus-Fehler slave {slave} @ {address}: {e}")
+        return None
+    if rr is None or rr.isError():
+        print(f"  ! Modbus-Antwortfehler slave {slave} @ {address}: {rr}")
+        return None
+    return rr.registers
+
+
+def _to_i32(regs):
+    """Zwei 16-Bit-Register (high word zuerst) als signed int32."""
+    if not regs or len(regs) < 2:
+        return None
+    return struct.unpack(">i", struct.pack(">HH", regs[0], regs[1]))[0]
+
+
+def _to_u32(regs):
+    """Zwei 16-Bit-Register (high word zuerst) als unsigned int32."""
+    if not regs or len(regs) < 2:
+        return None
+    return struct.unpack(">I", struct.pack(">HH", regs[0], regs[1]))[0]
+
+
+def read_inverter(client, slave):
+    """Liefert (power_kw, total_kwh) eines Wechselrichters oder (None, None)."""
+    p = _to_i32(_read_regs(client, slave, REG_WR_POWER, 2))
+    t = _to_u32(_read_regs(client, slave, REG_WR_TOTAL, 2))
+    power_kw  = p / 1000.0 if p is not None else None
+    total_kwh = t / 100.0  if t is not None else None
+    return power_kw, total_kwh
+
+
+def read_meter(client, slave):
+    """Zähler-Wirkleistung in kW (signiert: >0 Bezug, <0 Einspeisung)."""
+    w = _to_i32(_read_regs(client, slave, REG_METER_PWR, 2))
+    return w / 1000.0 if w is not None else None
+
+
+# ---------- Anlage einlesen und in DB-Felder umrechnen ----------
+def poll_plant(key, cfg):
+    """Liest eine komplette Anlage und gibt das pv_live/pv_samples-Dict zurück."""
+    client = ModbusTcpClient(cfg["host"], port=PORT, timeout=MODBUS_TIMEOUT)
+    if not client.connect():
+        print(f"  ! Verbindung zu {key} ({cfg['host']}) fehlgeschlagen")
+        return None
+    try:
+        p_sum, t_sum, n_ok = 0.0, 0.0, 0
+        for slave in cfg["inverters"]:
+            pw, tot = read_inverter(client, slave)
+            if pw is not None:
+                p_sum += pw
+                n_ok += 1
+            if tot is not None:
+                t_sum += tot
+        if n_ok == 0:
+            print(f"  ! {key}: kein Wechselrichter erreichbar")
+            return None
+
+        row = {
+            "plant": key,
+            "p_kw": round(p_sum, 3),
+            "total_kwh": round(t_sum, 2),
+            "load_kw": None,
+            "feed_kw": None,
+            "grid_kw": None,
+        }
+
+        if cfg["meter"] is not None:
+            grid_signed = read_meter(client, cfg["meter"])   # >0 Bezug, <0 Einspeisung
+            if grid_signed is not None:
+                # Verbrauch = Erzeugung + (Bezug - Einspeisung) = p + grid_signed
+                row["load_kw"] = round(p_sum + grid_signed, 3)
+                row["feed_kw"] = round(max(0.0, -grid_signed), 3)   # Einspeisung ins Netz
+                row["grid_kw"] = round(max(0.0, grid_signed), 3)    # Netzbezug
+        else:
+            # Volleinspeiser: alles ins Netz, kein Eigenverbrauch
+            row["feed_kw"] = round(p_sum, 3)
+            row["load_kw"] = 0.0
+            row["grid_kw"] = 0.0
+        return row
+    finally:
+        client.close()
+
+
+# ---------- Supabase-Schreibzugriff ----------
+def _headers():
+    return {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+    }
+
+
+def write_supabase(rows, ts_iso):
+    """Upsert nach pv_live und Insert in pv_samples für alle Anlagen."""
+    live = [{**r, "ts": ts_iso} for r in rows]
+    samples = [{**r, "ts": ts_iso} for r in rows]
+
+    # pv_live: Upsert auf Primärschlüssel plant
+    r1 = requests.post(
+        f"{SUPABASE_URL}/rest/v1/pv_live",
+        headers={**_headers(), "Prefer": "resolution=merge-duplicates"},
+        params={"on_conflict": "plant"},
+        json=live, timeout=15,
+    )
+    if not r1.ok:
+        print(f"  ! pv_live {r1.status_code}: {r1.text[:200]}")
+
+    # pv_samples: reiner Insert (Zeitreihe)
+    r2 = requests.post(
+        f"{SUPABASE_URL}/rest/v1/pv_samples",
+        headers=_headers(),
+        json=samples, timeout=15,
+    )
+    if not r2.ok:
+        print(f"  ! pv_samples {r2.status_code}: {r2.text[:200]}")
+
+
+# ---------- Hauptschleife ----------
+def main():
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        sys.exit("SUPABASE_URL und SUPABASE_SERVICE_KEY müssen gesetzt sein.")
+
+    print(f"Collector gestartet · Intervall {POLL_SECONDS}s · Ziel {SUPABASE_URL}")
+    while True:
+        t0 = time.time()
+        ts_iso = dt.datetime.now(dt.timezone.utc).isoformat()
+        rows = []
+        for key, cfg in PLANTS.items():
+            row = poll_plant(key, cfg)
+            if row:
+                rows.append(row)
+                print(f"  {key}: {row['p_kw']} kW · {row['total_kwh']} kWh"
+                      + (f" · Last {row['load_kw']} · Einsp {row['feed_kw']} · Bezug {row['grid_kw']}"
+                         if cfg["meter"] is not None else ""))
+        if rows:
+            try:
+                write_supabase(rows, ts_iso)
+            except Exception as e:               # noqa: BLE001
+                print(f"  ! Supabase-Schreibfehler: {e}")
+
+        # bis zum nächsten Intervall warten (driftarm)
+        time.sleep(max(1.0, POLL_SECONDS - (time.time() - t0)))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nBeendet.")

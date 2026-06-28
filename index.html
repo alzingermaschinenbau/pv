@@ -311,9 +311,9 @@
    KONFIGURATION
    ============================================================ */
 const CONFIG = {
-  mode: 'demo',                       // 'demo' | 'supabase'
-  supabaseUrl:     'https://DEIN-PROJEKT.supabase.co',
-  supabaseAnonKey: 'DEIN-ANON-KEY',
+  mode: 'supabase',                   // 'demo' | 'supabase'
+  supabaseUrl:     'https://tppwuvizobwnnfatysdh.supabase.co',
+  supabaseAnonKey: 'sb_publishable_FfD1ICiow9_RRlOGp0AE7A_0oWUERGy',
   plants: {
     voll:  { name:'Volleinspeiser', kwp:615, stationCode:'NE=XXXXXX' },
     eigen: { name:'Eigenverbrauch', kwp:335, stationCode:'NE=YYYYYY' },
@@ -473,6 +473,8 @@ const Supa = {
     const spMin = past.length ? Math.min(...past) : 0, spMax = past.length ? Math.max(...past) : 0;
     let negH = 0, negFeed = 0; for(let k = 0; k <= nowIdx; k++){ if(price[k] < 0){ negH += Hh; negFeed += feedTot[k] * Hh; } }
 
+    const labels = Array.from({ length: N }, (_, k) => { const mm = k * STEP; return String(Math.floor(mm/60)).padStart(2,'0') + ':' + String(mm%60).padStart(2,'0'); });
+
     return {
       now,
       voll:  { kw: v.p_kw || 0, day: vDay, month: sumMon('voll'), year: sumYr('voll'), kwp: CONFIG.plants.voll.kwp },
@@ -480,12 +482,11 @@ const Supa = {
                day: eDay, month: sumMon('eigen'), year: sumYr('eigen'), kwp: CONFIG.plants.eigen.kwp,
                selfKwh, feedKwh, gridKwh, loadDay,
                quote: eDay > 0 ? selfKwh / eDay * 100 : 0, autarkie: loadDay > 0 ? selfKwh / loadDay * 100 : 0 },
-      curve: { labels: Array.from({ length: N }, (_, k) => { const mm = k * STEP; return String(Math.floor(mm/60)).padStart(2,'0') + ':' + String(mm%60).padStart(2,'0'); }),
-               voll: vollC, eigen: eigenC, load: loadC, nowIdx },
+      curve: { labels, voll: vollC, eigen: eigenC, load: loadC, nowIdx },
       daily: dailyArr,
       monthly: monthlyArr,
       spot: { price, feedTot, now: price[nowIdx] || 0, avg: spAvg, min: spMin, max: spMax, negHours: negH, negFeedKwh: negFeed, rule: EEG_RULE.voll.name },
-      curtail: []
+      curtail: deriveCurtail(price, feedTot, labels, nowIdx, now)
     };
   }
 };
@@ -500,6 +501,24 @@ async function fetchSpotPricesDELU(date=new Date()){
   return (j.price||[]).map(p=>+(p/10).toFixed(2));
 }
 // Alternative ohne Key: aWATTar  https://api.awattar.de/v1/marketdata  (Feld 'marketprice' €/MWh)
+
+/* Marktbedingte Abregelung aus Negativpreis-Phasen ableiten.
+   Fasst aufeinanderfolgende Viertelstunden mit Negativpreis (und Einspeisung)
+   zu Ereignissen zusammen: from = Startuhrzeit, dur = Dauer (h),
+   kwh = in dieser Phase ohne Vergütung eingespeiste Energie. grund = 'market'.
+   (Netz-/Redispatch-Abregelung ist ohne DVM-Sollwerte nicht erkennbar.) */
+function deriveCurtail(price, feedTot, labels, nowIdx, date){
+  const out=[]; const Hh=STEP/60; let k=0;
+  while(k<=nowIdx){
+    if(price[k]<0){
+      let j=k, kwh=0;
+      while(j<=nowIdx && price[j]<0){ kwh+=Math.max(0,feedTot[j]||0)*Hh; j++; }
+      if(kwh>0) out.push({date,from:labels[k],dur:(j-k)*Hh,grund:'market',kwh:Math.round(kwh)});
+      k=j;
+    } else k++;
+  }
+  return out;
+}
 
 /* ============================================================
    CHARTS
