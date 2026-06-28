@@ -39,6 +39,13 @@ create table if not exists public.pv_samples (
 -- Index für die Zeitreihen-Abfragen der Views
 create index if not exists pv_samples_plant_ts_idx on public.pv_samples (plant, ts);
 
+-- Zähler-kWh-Stände (bezogene / eingespeiste Energie) – optional, nullable.
+-- Werden vom Collector befüllt, wenn METER_IMPORT_REG/METER_EXPORT_REG gesetzt sind.
+alter table public.pv_live    add column if not exists import_kwh double precision;
+alter table public.pv_live    add column if not exists export_kwh double precision;
+alter table public.pv_samples add column if not exists import_kwh double precision;
+alter table public.pv_samples add column if not exists export_kwh double precision;
+
 -- ---------- Views (alle in Europe/Berlin) ----------
 
 -- 15-Minuten-Kurve für HEUTE. Spalte "slot" ist ein lokaler Zeitstempel
@@ -79,6 +86,29 @@ where total_kwh is not null
 group by plant, monat
 order by monat;
 
+-- Zähler-Energie je Tag / Monat (Bezug/Einspeisung in kWh aus den Zählerständen)
+create or replace view public.pv_meter_daily as
+select
+  plant,
+  (ts at time zone 'Europe/Berlin')::date as tag,
+  max(import_kwh) - min(import_kwh) as import_kwh,
+  max(export_kwh) - min(export_kwh) as export_kwh
+from public.pv_samples
+where import_kwh is not null
+group by plant, tag
+order by tag;
+
+create or replace view public.pv_meter_monthly as
+select
+  plant,
+  to_char(ts at time zone 'Europe/Berlin', 'YYYY-MM') as monat,
+  max(import_kwh) - min(import_kwh) as import_kwh,
+  max(export_kwh) - min(export_kwh) as export_kwh
+from public.pv_samples
+where import_kwh is not null
+group by plant, monat
+order by monat;
+
 -- ---------- Row Level Security ----------
 -- anon/publishable darf NUR lesen; Schreiben ausschließlich mit service_role
 -- (service_role umgeht RLS grundsätzlich).
@@ -96,3 +126,4 @@ create policy "anon read pv_samples" on public.pv_samples for select to anon usi
 grant usage on schema public to anon, authenticated;
 grant select on public.pv_live, public.pv_samples to anon, authenticated;
 grant select on public.pv_today, public.pv_daily, public.pv_monthly to anon, authenticated;
+grant select on public.pv_meter_daily, public.pv_meter_monthly to anon, authenticated;

@@ -69,6 +69,31 @@ MODBUS_TIMEOUT = 5
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 
+# ---------- Zähler-Energieregister (kWh-Zählerstände) – optional ----------
+# Die kumulierten kWh-Stände des Zählers (bezogene / eingespeiste Energie).
+# Adressen je nach Zählermodell unterschiedlich -> per ENV setzen (kein Raten).
+# Bleiben sie 0/leer, wird die Funktion einfach übersprungen (kein Datenmüll).
+#   METER_IMPORT_REG   Register "bezogene Wirkenergie" (Netzbezug, kWh)
+#   METER_EXPORT_REG   Register "eingespeiste Wirkenergie" (Einspeisung, kWh)
+#   METER_ENERGY_TYPE  u32 | i32 | u64   (Standard u32)
+#   METER_ENERGY_GAIN  Teiler -> kWh     (Standard 100)
+def _int_env(name):
+    v = os.getenv(name, "").strip()
+    try:
+        return int(v) if v else None
+    except ValueError:
+        return None
+
+METER_IMPORT_REG  = _int_env("METER_IMPORT_REG")
+METER_EXPORT_REG  = _int_env("METER_EXPORT_REG")
+METER_ENERGY_TYPE = os.getenv("METER_ENERGY_TYPE", "u32").lower()
+METER_ENERGY_GAIN = float(os.getenv("METER_ENERGY_GAIN", "100"))
+METER_ENERGY_ON   = METER_IMPORT_REG is not None or METER_EXPORT_REG is not None
+
+# Diagnose-Hilfe: Registerbereich dumpen, um die kWh-Register zu finden.
+#   METER_SCAN="32278:40"  -> ab Register 32278 die nächsten 40 Register zeigen
+METER_SCAN = os.getenv("METER_SCAN", "").strip()
+
 
 # ---------- Modbus-Decoder ----------
 def _read_regs(client, slave, address, count):
@@ -96,6 +121,49 @@ def _to_u32(regs):
     if not regs or len(regs) < 2:
         return None
     return struct.unpack(">I", struct.pack(">HH", regs[0], regs[1]))[0]
+
+
+def _to_u64(regs):
+    """Vier 16-Bit-Register (high word zuerst) als unsigned int64."""
+    if not regs or len(regs) < 4:
+        return None
+    return struct.unpack(">Q", struct.pack(">HHHH", regs[0], regs[1], regs[2], regs[3]))[0]
+
+
+def read_meter_energy(client, slave, reg):
+    """Zählerstand in kWh aus 'reg' lesen (Typ/Gain laut ENV). None wenn aus/Fehler."""
+    if reg is None:
+        return None
+    count = 4 if METER_ENERGY_TYPE == "u64" else 2
+    regs = _read_regs(client, slave, reg, count)
+    if METER_ENERGY_TYPE == "u64":
+        raw = _to_u64(regs)
+    elif METER_ENERGY_TYPE == "i32":
+        raw = _to_i32(regs)
+    else:
+        raw = _to_u32(regs)
+    return round(raw / METER_ENERGY_GAIN, 2) if raw is not None else None
+
+
+def scan_registers(client, slave, spec):
+    """Diagnose: Registerbereich 'start:count' roh + als u32/u16 ausgeben."""
+    try:
+        start, count = (int(x) for x in spec.split(":"))
+    except ValueError:
+        print(f"  ! METER_SCAN ungültig: '{spec}' (erwartet z.B. 32278:40)")
+        return
+    regs = _read_regs(client, slave, start, count)
+    if not regs:
+        print("  ! METER_SCAN: keine Daten")
+        return
+    print(f"  --- METER_SCAN slave {slave}, ab {start} ---")
+    for i in range(0, len(regs) - 1, 2):
+        addr = start + i
+        u32 = struct.unpack(">I", struct.pack(">HH", regs[i], regs[i + 1]))[0]
+        i32 = struct.unpack(">i", struct.pack(">HH", regs[i], regs[i + 1]))[0]
+        print(f"    {addr}: u16={regs[i]:>6} {regs[i+1]:>6}  u32={u32:>12}  "
+              f"i32={i32:>12}  /100={u32/100:>12.2f}  /1000={u32/1000:>12.3f}")
+    print("  --- Ende METER_SCAN ---")
 
 
 def read_inverter(client, slave):
@@ -143,12 +211,18 @@ def poll_plant(key, cfg):
         }
 
         if cfg["meter"] is not None:
+            if METER_SCAN:
+                scan_registers(client, cfg["meter"], METER_SCAN)
             grid_signed = read_meter(client, cfg["meter"])   # >0 Bezug, <0 Einspeisung
             if grid_signed is not None:
                 # Verbrauch = Erzeugung + (Bezug - Einspeisung) = p + grid_signed
                 row["load_kw"] = round(p_sum + grid_signed, 3)
                 row["feed_kw"] = round(max(0.0, -grid_signed), 3)   # Einspeisung ins Netz
                 row["grid_kw"] = round(max(0.0, grid_signed), 3)    # Netzbezug
+            # Zähler-kWh-Stände (nur wenn Register konfiguriert sind)
+            if METER_ENERGY_ON:
+                row["import_kwh"] = read_meter_energy(client, cfg["meter"], METER_IMPORT_REG)
+                row["export_kwh"] = read_meter_energy(client, cfg["meter"], METER_EXPORT_REG)
         else:
             # Volleinspeiser: alles ins Netz, kein Eigenverbrauch
             row["feed_kw"] = round(p_sum, 3)
@@ -207,9 +281,12 @@ def main():
             row = poll_plant(key, cfg)
             if row:
                 rows.append(row)
-                print(f"  {key}: {row['p_kw']} kW · {row['total_kwh']} kWh"
-                      + (f" · Last {row['load_kw']} · Einsp {row['feed_kw']} · Bezug {row['grid_kw']}"
-                         if cfg["meter"] is not None else ""))
+                msg = f"  {key}: {row['p_kw']} kW · {row['total_kwh']} kWh"
+                if cfg["meter"] is not None:
+                    msg += f" · Last {row['load_kw']} · Einsp {row['feed_kw']} · Bezug {row['grid_kw']}"
+                    if METER_ENERGY_ON:
+                        msg += f" · Zähler Bezug {row.get('import_kwh')} / Einsp {row.get('export_kwh')} kWh"
+                print(msg)
         if rows:
             try:
                 write_supabase(rows, ts_iso)

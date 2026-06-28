@@ -33,6 +33,31 @@ python collector.py
 
 Die App liest daraus `pv_live` + Views `pv_today/pv_daily/pv_monthly`.
 
+## Zähler-kWh-Stände mitspeichern (optional)
+
+Standardmäßig werden vom Zähler nur die **Leistungen** (kW → Verbrauch/Bezug/
+Einspeisung) gespeichert. Die **kumulierten kWh-Zählerstände** (bezogene/
+eingespeiste Energie) lassen sich zusätzlich erfassen – dazu die Register-
+Adressen setzen (`METER_IMPORT_REG`, `METER_EXPORT_REG`, siehe `.env.example`).
+
+**Richtiges Register finden** (Adressen sind je Zählermodell unterschiedlich):
+1. In der `.env` `METER_SCAN=32278:40` setzen und Collector starten.
+2. Im Log erscheint eine Tabelle der Register mit Werten (`/100`, `/1000`).
+3. Den Wert mit der SmartLogger-WebUI (kWh-Anzeige des Zählers) vergleichen und
+   so die passende Register-Adresse + Teiler (Gain) bestimmen.
+4. `METER_SCAN` wieder leeren, `METER_IMPORT_REG`/`METER_EXPORT_REG`/
+   `METER_ENERGY_GAIN` eintragen, neu starten.
+
+Vorher die DB-Spalten anlegen (einmalig im Supabase SQL-Editor):
+```sql
+alter table public.pv_live    add column if not exists import_kwh double precision;
+alter table public.pv_live    add column if not exists export_kwh double precision;
+alter table public.pv_samples add column if not exists import_kwh double precision;
+alter table public.pv_samples add column if not exists export_kwh double precision;
+```
+(Komplett in `../sql/schema.sql` enthalten, inkl. Views `pv_meter_daily` /
+`pv_meter_monthly`.)
+
 ## Anlagen / Modbus
 
 | Anlage | Logger          | Wechselrichter (Slave-IDs)   | Zähler        |
