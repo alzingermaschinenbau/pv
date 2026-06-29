@@ -367,7 +367,7 @@
     <div class="chart-box"><canvas id="cEnergy"></canvas></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v23</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v24</span></p>
 
 </main>
 
@@ -975,6 +975,15 @@ document.querySelectorAll('#energyToggle button').forEach(b=>b.addEventListener(
   f.addEventListener('change',apply); t.addEventListener('change',apply);
   r.addEventListener('click',()=>{ f.value=''; t.value=''; energyFrom=''; energyTo=''; renderEnergy(energyRange); });
 })();
+
+/* Diagramm-Tooltips nicht „kleben" lassen: beim Scrollen oder Finger-Loslassen ausblenden */
+function clearChartTips(){
+  [cDay,cPrice,cEnergy,cBil,cCurtail,cHistCurtail].forEach(c=>{
+    try{ if(c){ c.setActiveElements([]); if(c.tooltip) c.tooltip.setActiveElements([],{x:0,y:0}); c.update('none'); } }catch(_){}
+  });
+}
+window.addEventListener('scroll',clearChartTips,{passive:true});
+document.addEventListener('touchend',clearChartTips,{passive:true});
 
 /* ============================================================
    START
