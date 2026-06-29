@@ -383,6 +383,20 @@
     <div class="chart-box"><canvas id="cEnergy"></canvas></div>
   </div>
 
+  <!-- Werksverbrauch (Tage/Wochen/Monate/Jahre) -->
+  <div class="erow"><span class="eyebrow">Werksverbrauch</span>
+    <div class="seg" id="loadToggle">
+      <button data-range="days" class="active">Tage</button>
+      <button data-range="weeks">Wochen</button>
+      <button data-range="months">Monate</button>
+      <button data-range="years">Jahre</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="legend"><span><i style="background:var(--blue)"></i>Werksverbrauch</span><span class="chint" id="loadHint" style="margin-left:auto">kWh / Tag</span></div>
+    <div class="chart-box"><canvas id="cLoad"></canvas></div>
+  </div>
+
   <!-- Auswertung / PDF-Bericht -->
   <div class="erow" id="sec-bericht"><span class="eyebrow">Auswertung · PDF-Bericht</span></div>
   <div class="card">
@@ -400,7 +414,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v26</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v27</span></p>
 
 </main>
 
@@ -515,7 +529,8 @@ const Demo={
         {date:new Date('2026-06-08T12:00:00'),plantKey:'voll',plant:'Volleinspeiser',actual:659,expected:3427,lost:2768,sun:100,dauer:8.7,von:'09:20',bis:'17:55',quelle:'5min'},
         {date:new Date('2026-06-23T12:00:00'),plantKey:'voll',plant:'Volleinspeiser',actual:325,expected:2976,lost:2651,sun:100,dauer:9.1,von:'09:00',bis:'18:00',quelle:'5min'},
         {date:new Date('2025-08-12T12:00:00'),plantKey:'voll',plant:'Volleinspeiser',actual:277,expected:3320,lost:3043,sun:90,dauer:null,von:null,bis:null,quelle:'tag'}],
-      negDaily:[{tag:'2026-06-08',neg_h:5.5},{tag:'2026-06-23',neg_h:6.25},{tag:'2026-05-12',neg_h:3.0}]
+      negDaily:[{tag:'2026-06-08',neg_h:5.5},{tag:'2026-06-23',neg_h:6.25},{tag:'2026-05-12',neg_h:3.0}],
+      loadAll:(()=>{const a=[],t=new Date();for(let d=29;d>=0;d--){const x=new Date(t);x.setDate(t.getDate()-d);a.push({date:x,load:Math.round(1700*(0.55+0.5*rnd()))});}return a;})()
     };
   }
 };
@@ -700,7 +715,8 @@ const Supa = {
       spot: { price, feedTot, price48, labels48, feed48, now: price[nowIdx] || 0, avg: spAvg, min: spMin, max: spMax, negHours: negH, negFeedKwh: negFeed, rule: EEG_RULE.voll.name },
       curtail: zeroEvents.concat(deriveCurtail(price, feedTot, labels, nowIdx, now)),
       histCurtail,
-      negDaily: (negDaily || []).map(r => ({ tag: r.tag, neg_h: r.neg_h || 0 }))
+      negDaily: (negDaily || []).map(r => ({ tag: r.tag, neg_h: r.neg_h || 0 })),
+      loadAll: (loadD || []).map(r => ({ date: new Date((r.tag || '') + 'T12:00:00'), load: r.load_kwh || 0 }))
     };
   }
 };
@@ -745,7 +761,7 @@ const GRID='rgba(24,26,29,.06)';
 const axM=u=>({grid:{color:GRID,drawBorder:false},border:{display:false},ticks:{callback:v=>nf0.format(v),maxTicksLimit:6},title:{display:!!u,text:u,color:'#9AA0A6'}});
 const tipNum=suf=>({callbacks:{label:c=>c.dataset.label+': '+nf0.format(c.parsed.y)+' '+suf}});
 const RED='#CB2A24', GOLD='#C8881F', CHAR='#3A3F46', BLUE='#2F5BD6', GREEN='#2FA968';
-let cDay,cBil,cEnergy,cPrice,cCurtail,cHistCurtail,lastSnap,energyRange='days',energyFrom='',energyTo='';
+let cDay,cBil,cEnergy,cPrice,cCurtail,cHistCurtail,cLoad,lastSnap,energyRange='days',energyFrom='',energyTo='',loadRange='days';
 
 function buildCharts(s){
   cDay=new Chart(document.getElementById('chartDay'),{type:'line',
@@ -813,6 +829,14 @@ function buildCharts(s){
       {label:'Eigenverbrauch',data:hcBy('eigen'),backgroundColor:GOLD,borderRadius:3}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.label+': '+nf1.format(c.parsed.y)+' MWh'}}},
       scales:{x:{stacked:true,grid:{display:false},border:{display:false},ticks:{maxTicksLimit:12}},y:{stacked:true,...axM('MWh entgangen')}}}});
+
+  // Werksverbrauch – umschaltbar Tage/Wochen/Monate/Jahre
+  cLoad=new Chart(document.getElementById('cLoad'),{type:'bar',
+    data:{labels:[],datasets:[{label:'Werksverbrauch',data:[],backgroundColor:BLUE,borderRadius:3}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>{const u=c.chart.$unit||'kWh';return 'Werksverbrauch: '+(u==='MWh'?nf1.format(c.parsed.y):nf0.format(c.parsed.y))+' '+u;}}}},
+      scales:{x:{grid:{display:false},border:{display:false},ticks:{maxTicksLimit:12}},y:{...axM('kWh')}}}});
+  cLoad.$unit='kWh';
 }
 
 /* Energie-Auswertung: Kalender (von–bis) + Gruppierung (Tage/Wochen/Monate/Jahre).
@@ -862,6 +886,24 @@ function renderEnergy(range){
   document.querySelectorAll('#energyToggle button').forEach(b=>b.classList.toggle('active', b.dataset.range===range));
 }
 
+/* Werksverbrauch-Chart je Filter (Tage/Wochen/Monate/Jahre) */
+function renderLoad(range){
+  if(!cLoad || !lastSnap) return;
+  loadRange = range;
+  const all = lastSnap.loadAll || [];
+  const B = new Map();
+  for(const d of all){ const [k,l]=repBucket(d.date,range); const o=B.get(k)||{label:l,load:0}; o.load+=d.load||0; B.set(k,o); }
+  let arr=[...B.entries()].sort((a,b)=>a[0]<b[0]?-1:1).map(e=>e[1]);
+  const n = range==='days'?30 : range==='weeks'?16 : range==='months'?12 : 99; arr=arr.slice(-n);
+  const mwh = range!=='days'; const div = mwh?1000:1, unit = mwh?'MWh':'kWh';
+  const gl = {days:'Tag',weeks:'Woche',months:'Monat',years:'Jahr'}[range];
+  cLoad.data.labels = arr.map(b=>b.label);
+  cLoad.data.datasets[0].data = arr.map(b=>+(b.load/div).toFixed(mwh?1:0));
+  cLoad.$unit = unit; cLoad.options.scales.y.title.text = unit; cLoad.update();
+  const he=document.getElementById('loadHint'); if(he) he.textContent = arr.length ? `${unit} / ${gl}` : 'Noch keine Verbrauchsdaten';
+  document.querySelectorAll('#loadToggle button').forEach(b=>b.classList.toggle('active', b.dataset.range===range));
+}
+
 /* ============================================================
    ANZEIGE
    ============================================================ */
@@ -877,7 +919,7 @@ function headline(s){const tot=s.voll.kw+s.eigen.kw, peak=s.voll.kwp+s.eigen.kwp
   return 'Aktuell <span class="r">'+fmtKW(tot)+'&nbsp;kW</span> Erzeugung.';}
 
 function paint(s,first){
-  lastSnap=s; renderEnergy(energyRange);
+  lastSnap=s; renderEnergy(energyRange); if(cLoad) renderLoad(loadRange);
   const total=s.voll.kw+s.eigen.kw, peak=s.voll.kwp+s.eigen.kwp;
   const h=s.now.getHours()+s.now.getMinutes()/60;
   document.getElementById('hi').textContent=greeting(h);
@@ -1003,6 +1045,7 @@ document.getElementById('refreshBtn').addEventListener('click',refresh);
 
 /* Energie-Filter: Tage / Monate / Jahre umschalten */
 document.querySelectorAll('#energyToggle button').forEach(b=>b.addEventListener('click',()=>renderEnergy(b.dataset.range)));
+document.querySelectorAll('#loadToggle button').forEach(b=>b.addEventListener('click',()=>renderLoad(b.dataset.range)));
 
 /* Zeitraum-Wähler (Kalender von–bis) für die Tagesansicht */
 (function(){
@@ -1015,7 +1058,7 @@ document.querySelectorAll('#energyToggle button').forEach(b=>b.addEventListener(
 
 /* Diagramm-Tooltips nicht „kleben" lassen: beim Scrollen oder Finger-Loslassen ausblenden */
 function clearChartTips(){
-  [cDay,cPrice,cEnergy,cBil,cCurtail,cHistCurtail].forEach(c=>{
+  [cDay,cPrice,cEnergy,cBil,cCurtail,cHistCurtail,cLoad].forEach(c=>{
     try{ if(c){ c.setActiveElements([]); if(c.tooltip) c.tooltip.setActiveElements([],{x:0,y:0}); c.update('none'); } }catch(_){}
   });
 }
