@@ -172,10 +172,13 @@
     <h1 id="head">Anlagen werden geladen …</h1>
   </section>
 
+  <div id="offlineBar" style="display:none;background:var(--brand-soft);color:var(--brand-ink);border:1px solid var(--brand);border-radius:var(--r-sm);padding:11px 14px;margin:12px 0 2px;font-weight:700;font-size:.86rem"></div>
+
   <div class="erow"><span class="eyebrow">Momentan</span><span class="ts num" id="clock">--:--:--</span></div>
   <div class="kpirow">
     <div class="kcard" style="--ac:var(--brand)"><div class="kl">Gesamtleistung</div><hr><div class="kn" id="ro-total" style="color:var(--brand)">0</div><div class="ku"><span id="ro-total-sub">0&nbsp;%</span> der Spitze · 950 kWp</div></div>
-    <div class="kcard" style="--ac:var(--blue)"><div class="kl">Verbrauch Werk</div><hr><div class="kn" id="ro-load">0</div><div class="ku">kW · Eigenverbrauchsanlage</div></div>
+    <div class="kcard" style="--ac:var(--blue)"><div class="kl">Werksverbrauch momentan</div><hr><div class="kn" id="ro-load">0</div><div class="ku">kW · Eigenverbrauchsanlage</div></div>
+    <div class="kcard" style="--ac:var(--blue)"><div class="kl">Tagesverbrauch Werk</div><hr><div class="kn" id="ro-loadday" style="color:var(--blue)">0</div><div class="ku">kWh heute</div></div>
     <div class="kcard" style="--ac:var(--purple)"><div class="kl">Einspeisung</div><hr><div class="kn" id="ro-feed" style="color:var(--purple)">0</div><div class="ku">kW netto ins Netz</div></div>
     <div class="kcard" style="--ac:var(--gold)"><div class="kl">Netzbezug</div><hr><div class="kn" id="ro-grid" style="color:var(--gold)">0</div><div class="ku">kW aus dem Netz</div></div>
     <div class="kcard" id="k-spot" style="--ac:var(--green)"><div class="kl">Spotpreis jetzt</div><hr><div class="kn" id="ro-spot" style="color:var(--green)">0</div><div class="ku" id="ro-spot-u">ct/kWh</div></div>
@@ -296,7 +299,7 @@
     <div class="chart-box"><canvas id="chart12"></canvas></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v8</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v9</span></p>
 
 </main>
 
@@ -390,7 +393,7 @@ const Demo={
     let negH=0,negFeed=0;for(let k=0;k<=i;k++){if(spotC[k]<0){negH+=STEP/60;negFeed+=feedTot[k]*(STEP/60);}}
     const past=spotC.slice(0,i+1), spAvg=past.reduce((a,b)=>a+b,0)/past.length, spMin=Math.min(...past), spMax=Math.max(...past);
     return {
-      now:this.now(),
+      now:this.now(), liveTs:this.now().toISOString(),
       voll:{kw:vollKw,day:vollDay,month:84500,year:352000,kwp:615},
       eigen:{kw:pvKw,load:loadKw,feed:feedKw,grid:gridKw,day:pvDay,month:46000,year:191000,kwp:335,
              selfKwh:self,feedKwh:feed,gridKwh:grid,loadDay:loadDay,loadMonth:38000,loadYear:152000,
@@ -431,6 +434,8 @@ const Supa = {
     const live = await this._q('pv_live?select=plant,p_kw,load_kw,feed_kw,grid_kw,total_kwh,ts');
     const L = {}; live.forEach(r => L[r.plant] = r);
     const v = L.voll || {}, e = L.eigen || {};
+    // Neuester Zeitstempel der Live-Daten (für die Offline-Erkennung)
+    const liveTs = [v.ts, e.ts].filter(Boolean).sort().slice(-1)[0] || null;
 
     // 2) Heutige 15-Minuten-Kurve (max. 96 Punkte je Anlage)
     const today = await this._q('pv_today?select=plant,slot,p_kw,load_kw,feed_kw,grid_kw').catch(() => []);
@@ -531,7 +536,7 @@ const Supa = {
     const labels = Array.from({ length: N }, (_, k) => { const mm = k * STEP; return String(Math.floor(mm/60)).padStart(2,'0') + ':' + String(mm%60).padStart(2,'0'); });
 
     return {
-      now,
+      now, liveTs,
       voll:  { kw: v.p_kw || 0, day: vDay, month: sumMon('voll'), year: sumYr('voll'), kwp: CONFIG.plants.voll.kwp },
       eigen: { kw: e.p_kw || 0, load: e.load_kw || 0, feed: e.feed_kw || 0, grid: e.grid_kw || 0,
                day: eDay, month: sumMon('eigen'), year: sumYr('eigen'), kwp: CONFIG.plants.eigen.kwp,
@@ -669,9 +674,10 @@ function paint(s,first){
   document.getElementById('hi').textContent=greeting(h);
   document.getElementById('head').innerHTML=headline(s);
 
-  if(first){countUp(document.getElementById('ro-total'),total);countUp(document.getElementById('ro-load'),s.eigen.load);countUp(document.getElementById('ro-feed'),s.eigen.feed);countUp(document.getElementById('ro-grid'),s.eigen.grid);}
-  else{document.getElementById('ro-total').textContent=fmtKW(total);document.getElementById('ro-load').textContent=fmtKW(s.eigen.load);document.getElementById('ro-feed').textContent=fmtKW(s.eigen.feed);document.getElementById('ro-grid').textContent=fmtKW(s.eigen.grid);}
+  if(first){countUp(document.getElementById('ro-total'),total);countUp(document.getElementById('ro-load'),s.eigen.load);countUp(document.getElementById('ro-feed'),s.eigen.feed);countUp(document.getElementById('ro-grid'),s.eigen.grid);countUp(document.getElementById('ro-loadday'),s.eigen.loadDay||0);}
+  else{document.getElementById('ro-total').textContent=fmtKW(total);document.getElementById('ro-load').textContent=fmtKW(s.eigen.load);document.getElementById('ro-feed').textContent=fmtKW(s.eigen.feed);document.getElementById('ro-grid').textContent=fmtKW(s.eigen.grid);document.getElementById('ro-loadday').textContent=fmtKW(s.eigen.loadDay||0);}
   document.getElementById('ro-total-sub').textContent=fmtPct(total/peak*100);
+  _liveTs = s.liveTs ? new Date(s.liveTs).getTime() : null; updateOffline();
 
   // Spotpreis-KPI (Akzent nach Vorzeichen)
   if(s.spot){const neg=s.spot.now<0;const col=neg?'var(--brand)':'var(--green)';
@@ -731,7 +737,18 @@ function paint(s,first){
   if(CONFIG.mode==='supabase'){document.getElementById('srcbadge').textContent='Supabase · live';document.getElementById('livelabel').textContent='Live';}
 }
 
-function tickClock(){const n=Source.now?Source.now():new Date();document.getElementById('clock').textContent=n.toLocaleTimeString('de-DE',{hour12:false});}
+function tickClock(){const n=Source.now?Source.now():new Date();document.getElementById('clock').textContent=n.toLocaleTimeString('de-DE',{hour12:false});updateOffline();}
+
+/* Offline-Erkennung: warnt, wenn der letzte Live-Wert zu alt ist (Collector/VPN weg) */
+const STALE_SEC = 180;
+let _liveTs = null;
+function fmtAge(sec){ return sec < 90 ? Math.round(sec)+' Sek.' : sec < 5400 ? Math.round(sec/60)+' Min.' : Math.round(sec/3600)+' Std.'; }
+function updateOffline(){ const bar=document.getElementById('offlineBar'); if(!bar) return;
+  if(CONFIG.mode!=='supabase' || !_liveTs){ bar.style.display='none'; return; }
+  const age=(Date.now()-_liveTs)/1000;
+  if(age>STALE_SEC){ bar.style.display='block'; bar.textContent='⚠ Daten veraltet – letzte Aktualisierung vor '+fmtAge(age)+'. Collector oder VPN offline?'; }
+  else bar.style.display='none';
+}
 
 async function refresh(){const b=document.getElementById('refreshBtn');b.classList.add('spin');setTimeout(()=>b.classList.remove('spin'),550);
   let u;try{u=await Source.snapshot();}catch(_){u=await Demo.snapshot();}paint(u,false);}
