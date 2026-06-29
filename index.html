@@ -92,6 +92,11 @@
   .legend{display:flex;flex-wrap:wrap;gap:7px 16px;margin:2px 0 12px;font-size:.78rem;font-weight:600;color:var(--char)}
   .legend span{display:inline-flex;align-items:center;gap:7px}
   .legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .dayread{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin:2px 0 10px;font-size:.82rem;font-weight:600;color:var(--char)}
+  .dayread .t{font-weight:800;font-variant-numeric:tabular-nums;color:var(--ink)}
+  .dayread span{display:inline-flex;align-items:center;gap:6px}
+  .dayread i{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .dayread b{font-variant-numeric:tabular-nums}
 
   /* plant cards */
   .plants{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -239,12 +244,14 @@
   <!-- Tagesverlauf -->
   <div class="erow" id="sec-verlauf"><span class="eyebrow">Tagesverlauf</span><span class="chint">heute · 15-Min · kW</span></div>
   <div class="card">
-    <div class="legend">
-      <span><i style="background:var(--brand)"></i>Volleinspeiser</span>
-      <span><i style="background:var(--gold)"></i>Eigenverbrauch</span>
-      <span><i style="background:var(--char)"></i>Verbrauch (Last)</span>
+    <div class="dayread" id="dayReadout">
+      <span class="t" id="dr-time">--:--</span>
+      <span><i style="background:var(--brand)"></i>Voll <b id="dr-voll">–</b></span>
+      <span><i style="background:var(--gold)"></i>Eigen <b id="dr-eigen">–</b></span>
+      <span><i style="background:var(--char)"></i>Verbrauch <b id="dr-load">–</b></span>
     </div>
     <div class="chart-box tall"><canvas id="chartDay"></canvas></div>
+    <p class="finehint" style="text-align:center;margin-top:8px">Linie ziehen ↔ zeigt Uhrzeit &amp; Werte</p>
   </div>
 
   <!-- Bilanz + Tabelle -->
@@ -414,7 +421,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v27</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v28</span></p>
 
 </main>
 
@@ -763,6 +770,13 @@ const tipNum=suf=>({callbacks:{label:c=>c.dataset.label+': '+nf0.format(c.parsed
 const RED='#CB2A24', GOLD='#C8881F', CHAR='#3A3F46', BLUE='#2F5BD6', GREEN='#2FA968';
 let cDay,cBil,cEnergy,cPrice,cCurtail,cHistCurtail,cLoad,lastSnap,energyRange='days',energyFrom='',energyTo='',loadRange='days';
 
+  // Ziehbare Scrubber-Linie für den Tagesverlauf
+  const scrubLine={id:'scrubLine',afterDatasetsDraw(ch){const i=ch.$scrubIdx; if(i==null||!ch.chartArea)return;
+    const x=ch.scales.x.getPixelForValue(i); const {ctx,chartArea:a}=ch;
+    ctx.save();ctx.strokeStyle='rgba(58,63,70,.5)';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(x,a.top);ctx.lineTo(x,a.bottom);ctx.stroke();
+    ctx.fillStyle=BLUE;ctx.beginPath();ctx.arc(x,a.bottom,6,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x,a.bottom,2.5,0,Math.PI*2);ctx.fill();ctx.restore();}};
 function buildCharts(s){
   cDay=new Chart(document.getElementById('chartDay'),{type:'line',
     data:{labels:s.curve.labels,datasets:[
@@ -771,8 +785,10 @@ function buildCharts(s){
       {label:'Verbrauch',data:s.curve.load,borderColor:CHAR,borderDash:[5,4],fill:false,tension:.35,pointRadius:0,borderWidth:1.6},
     ]},
     options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
-      plugins:{legend:{display:false},tooltip:tipNum('kW')},
-      scales:{x:{grid:{display:false},border:{display:false},ticks:{maxTicksLimit:9}},y:axM('kW')}}});
+      plugins:{legend:{display:false},tooltip:{enabled:false}},
+      scales:{x:{grid:{display:false},border:{display:false},ticks:{maxTicksLimit:9}},y:axM('kW')}},
+    plugins:[scrubLine]});
+  setupDayScrub();
 
   cBil=new Chart(document.getElementById('chartBilanz'),{type:'doughnut',
     data:{labels:['Eigenverbrauch','Einspeisung'],datasets:[{data:[s.eigen.selfKwh,s.eigen.feedKwh],
@@ -904,6 +920,31 @@ function renderLoad(range){
   document.querySelectorAll('#loadToggle button').forEach(b=>b.classList.toggle('active', b.dataset.range===range));
 }
 
+/* Tagesverlauf: ziehbare Linie + Werte-Anzeige oben */
+function updateDayReadout(idx){
+  const c=lastSnap&&lastSnap.curve; if(!c||!cDay) return;
+  const n=c.labels.length; if(!n) return;
+  idx=Math.max(0,Math.min(n-1, idx|0));
+  cDay.$scrubIdx=idx; cDay.update('none');
+  const set=(id,v)=>{const el=document.getElementById(id); if(el) el.textContent=v;};
+  set('dr-time', c.labels[idx]);
+  set('dr-voll', fmtKW(c.voll[idx]||0)+' kW');
+  set('dr-eigen', fmtKW(c.eigen[idx]||0)+' kW');
+  set('dr-load', fmtKW(c.load[idx]||0)+' kW');
+}
+function setupDayScrub(){
+  if(!cDay||!cDay.canvas) return;
+  cDay.canvas.style.touchAction='pan-y';
+  let drag=false;
+  const scrub=ev=>{ const r=cDay.canvas.getBoundingClientRect();
+    const cx=(ev.touches&&ev.touches[0])?ev.touches[0].clientX:ev.clientX;
+    const idx=Math.round(cDay.scales.x.getValueForPixel(cx-r.left));
+    updateDayReadout(idx); };
+  cDay.canvas.addEventListener('pointerdown',e=>{drag=true;scrub(e);});
+  window.addEventListener('pointermove',e=>{ if(drag) scrub(e); });
+  window.addEventListener('pointerup',()=>{drag=false;});
+}
+
 /* ============================================================
    ANZEIGE
    ============================================================ */
@@ -920,6 +961,7 @@ function headline(s){const tot=s.voll.kw+s.eigen.kw, peak=s.voll.kwp+s.eigen.kwp
 
 function paint(s,first){
   lastSnap=s; renderEnergy(energyRange); if(cLoad) renderLoad(loadRange);
+  if(cDay) updateDayReadout(cDay.$scrubIdx!=null?cDay.$scrubIdx:(s.curve?s.curve.nowIdx:0));
   const total=s.voll.kw+s.eigen.kw, peak=s.voll.kwp+s.eigen.kwp;
   const h=s.now.getHours()+s.now.getMinutes()/60;
   document.getElementById('hi').textContent=greeting(h);
