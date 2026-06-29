@@ -153,6 +153,25 @@ group by monat order by monat;
 
 grant select on public.pv_load_daily, public.pv_load_monthly to anon, authenticated;
 
+-- ---------- Historischer Import (aus SmartLogger-/FusionSolar-Export) ----------
+-- Erzeugung je Tag/Monat aus den Logger-Exporten; die App mischt sie mit den
+-- Live-Daten (Live hat Vorrang bei gleichem Datum/Monat).
+create table if not exists public.pv_hist_daily (
+  plant text, tag date, gen_kwh double precision,
+  primary key (plant, tag)
+);
+create table if not exists public.pv_hist_monthly (
+  plant text, monat text, gen_kwh double precision,
+  primary key (plant, monat)
+);
+alter table public.pv_hist_daily   enable row level security;
+alter table public.pv_hist_monthly enable row level security;
+drop policy if exists "anon read pv_hist_daily"   on public.pv_hist_daily;
+drop policy if exists "anon read pv_hist_monthly" on public.pv_hist_monthly;
+create policy "anon read pv_hist_daily"   on public.pv_hist_daily   for select to anon using (true);
+create policy "anon read pv_hist_monthly" on public.pv_hist_monthly for select to anon using (true);
+grant select on public.pv_hist_daily, public.pv_hist_monthly to anon, authenticated;
+
 -- ---------- Börsen-Spotpreise ----------
 -- Vom Collector server-seitig befüllt (Energy-Charts), damit der Browser sie
 -- nicht selbst laden muss (kein CORS-Problem). Preis in ct/kWh je Viertelstunde.

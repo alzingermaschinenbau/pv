@@ -299,7 +299,7 @@
     <div class="chart-box"><canvas id="chart12"></canvas></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v9</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v10</span></p>
 
 </main>
 
@@ -462,32 +462,42 @@ const Supa = {
     }
 
     // 3) Tages- und Monatsenergie (30-Tage / 12-Monate / Monat / Jahr) + Werksverbrauch
-    let daily, monthly, loadD, loadM;
+    let daily, monthly, loadD, loadM, histD, histM;
     if(_slowCache.daily && (Date.now() - _slowCache.dmTs) < SUPA_DM_TTL){
-      daily = _slowCache.daily; monthly = _slowCache.monthly; loadD = _slowCache.loadD; loadM = _slowCache.loadM;
+      daily = _slowCache.daily; monthly = _slowCache.monthly; loadD = _slowCache.loadD; loadM = _slowCache.loadM; histD = _slowCache.histD; histM = _slowCache.histM;
     } else {
       daily   = await this._q('pv_daily?select=plant,tag,gen_kwh&order=tag.asc').catch(() => []);
       monthly = await this._q('pv_monthly?select=plant,monat,gen_kwh&order=monat.asc').catch(() => []);
       loadD   = await this._q('pv_load_daily?select=tag,load_kwh&order=tag.asc').catch(() => []);
       loadM   = await this._q('pv_load_monthly?select=monat,load_kwh&order=monat.asc').catch(() => []);
-      _slowCache.daily = daily; _slowCache.monthly = monthly; _slowCache.loadD = loadD; _slowCache.loadM = loadM; _slowCache.dmTs = Date.now();
+      histD   = await this._q('pv_hist_daily?select=plant,tag,gen_kwh&order=tag.asc').catch(() => []);    // importierte Historie
+      histM   = await this._q('pv_hist_monthly?select=plant,monat,gen_kwh&order=monat.asc').catch(() => []);
+      _slowCache.daily = daily; _slowCache.monthly = monthly; _slowCache.loadD = loadD; _slowCache.loadM = loadM; _slowCache.histD = histD; _slowCache.histM = histM; _slowCache.dmTs = Date.now();
     }
 
+    // Tageskarte: erst Historie, dann Live (Live hat Vorrang bei gleichem Datum)
     const dmap = {};
+    (histD || []).forEach(r => { const o = dmap[r.tag] = dmap[r.tag] || { date: new Date(r.tag + 'T12:00:00'), voll: 0, eigen: 0 }; o[r.plant] = Math.round(r.gen_kwh || 0); });
     daily.forEach(r => { const o = dmap[r.tag] = dmap[r.tag] || { date: new Date(r.tag + 'T12:00:00'), voll: 0, eigen: 0 }; o[r.plant] = Math.round(r.gen_kwh || 0); });
     const dailyArr = Object.keys(dmap).sort().slice(-30).map(k => dmap[k]);
 
     const MON = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
     const mmap = {};
+    (histM || []).forEach(r => { const o = mmap[r.monat] = mmap[r.monat] || { label: MON[(+r.monat.slice(5,7)) - 1] || r.monat, voll: 0, eigen: 0 }; o[r.plant] = Math.round(r.gen_kwh || 0); });
     monthly.forEach(r => { const o = mmap[r.monat] = mmap[r.monat] || { label: MON[(+r.monat.slice(5,7)) - 1] || r.monat, voll: 0, eigen: 0 }; o[r.plant] = Math.round(r.gen_kwh || 0); });
     const monthlyArr = Object.keys(mmap).sort().slice(-12).map(k => mmap[k]);
 
     const pad = n => String(n).padStart(2,'0');
     const todayKey = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
     const curMon = todayKey.slice(0,7), curYr = String(now.getFullYear());
-    const sumMon = p => monthly.filter(r => r.plant === p && r.monat === curMon).reduce((a,b) => a + (b.gen_kwh || 0), 0);
-    const sumYr  = p => monthly.filter(r => r.plant === p && r.monat.startsWith(curYr)).reduce((a,b) => a + (b.gen_kwh || 0), 0);
-    const dayDB  = p => { const r = daily.find(x => x.plant === p && x.tag === todayKey); return r ? r.gen_kwh : null; };
+    // Monatswerte je Anlage zusammenführen (Live hat Vorrang vor Historie)
+    const monMap = {};
+    (histM || []).forEach(r => { monMap[r.plant + '|' + r.monat] = r.gen_kwh || 0; });
+    monthly.forEach(r => { monMap[r.plant + '|' + r.monat] = r.gen_kwh || 0; });
+    const sumMon = p => monMap[p + '|' + curMon] || 0;
+    const sumYr  = p => Object.keys(monMap).filter(k => k.startsWith(p + '|' + curYr)).reduce((a,k) => a + monMap[k], 0);
+    const dayDB  = p => { const r = daily.find(x => x.plant === p && x.tag === todayKey); if(r) return r.gen_kwh;
+                          const h = (histD || []).find(x => x.plant === p && x.tag === todayKey); return h ? h.gen_kwh : null; };
     const vDay = dayDB('voll')  != null ? dayDB('voll')  : vollDay;
     const eDay = dayDB('eigen') != null ? dayDB('eigen') : eigenDay;
 
