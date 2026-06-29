@@ -69,6 +69,10 @@ POLL_SECONDS = int(os.getenv("POLL_SECONDS", "60"))
 # (z.B. POLL_SECONDS=10 für eine flotte Live-Anzeige), ohne die Historie/DB
 # mit zu vielen Zeilen zu fluten.
 SAMPLE_SECONDS = int(os.getenv("SAMPLE_SECONDS", "60"))
+# Börsen-Spotpreise (Energy-Charts) server-seitig holen und nach pv_spot schreiben.
+# So muss der Browser sie nicht selbst laden (kein CORS-Problem). 0 = aus.
+SPOT_SECONDS = int(os.getenv("SPOT_SECONDS", "900"))   # alle 15 Min
+SPOT_BZN = os.getenv("SPOT_BZN", "DE-LU")
 MODBUS_TIMEOUT = 5
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
@@ -286,6 +290,45 @@ def write_supabase(rows, ts_iso, with_samples=True):
             print(f"  ! pv_samples {r2.status_code}: {r2.text[:200]}")
 
 
+def fetch_and_store_spot():
+    """Börsenpreise (Energy-Charts, DE-LU) holen und nach pv_spot schreiben.
+    Läuft server-seitig im Collector -> kein CORS-Problem im Browser."""
+    try:
+        from zoneinfo import ZoneInfo
+        d = dt.datetime.now(ZoneInfo("Europe/Berlin")).strftime("%Y-%m-%d")
+    except Exception:                                # noqa: BLE001  (z.B. Windows ohne tzdata)
+        d = dt.datetime.now().strftime("%Y-%m-%d")
+    url = f"https://api.energy-charts.info/price?bzn={SPOT_BZN}&start={d}&end={d}"
+    try:
+        r = requests.get(url, timeout=15)
+        if not r.ok:
+            print(f"  ! Spotpreise {r.status_code}")
+            return
+        j = r.json()
+    except Exception as e:                           # noqa: BLE001
+        print(f"  ! Spotpreise-Fehler: {e}")
+        return
+    secs = j.get("unix_seconds") or []
+    prices = j.get("price") or []
+    rows = [{"slot": dt.datetime.fromtimestamp(t, dt.timezone.utc).isoformat(),
+             "price": round(p / 10.0, 2)}                      # EUR/MWh -> ct/kWh
+            for t, p in zip(secs, prices) if p is not None]
+    if not rows:
+        return
+    try:
+        resp = requests.post(
+            f"{SUPABASE_URL}/rest/v1/pv_spot",
+            headers={**_headers(), "Prefer": "resolution=merge-duplicates"},
+            params={"on_conflict": "slot"}, json=rows, timeout=15,
+        )
+        if not resp.ok:
+            print(f"  ! pv_spot {resp.status_code}: {resp.text[:200]}")
+        else:
+            print(f"  Spotpreise aktualisiert ({len(rows)} Werte)")
+    except Exception as e:                           # noqa: BLE001
+        print(f"  ! pv_spot-Schreibfehler: {e}")
+
+
 # ---------- Hauptschleife ----------
 def main():
     if not SUPABASE_URL or not SUPABASE_KEY:
@@ -293,8 +336,14 @@ def main():
 
     print(f"Collector gestartet · Poll {POLL_SECONDS}s · Sample {SAMPLE_SECONDS}s · Ziel {SUPABASE_URL}")
     last_sample = 0.0
+    last_spot = 0.0
     while True:
         t0 = time.time()
+
+        # Spotpreise periodisch holen (server-seitig, kein CORS)
+        if SPOT_SECONDS and (t0 - last_spot) >= SPOT_SECONDS:
+            fetch_and_store_spot()
+            last_spot = t0
         ts_iso = dt.datetime.now(dt.timezone.utc).isoformat()
         collected = []
         for key, cfg in PLANTS.items():

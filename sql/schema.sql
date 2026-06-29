@@ -127,3 +127,24 @@ grant usage on schema public to anon, authenticated;
 grant select on public.pv_live, public.pv_samples to anon, authenticated;
 grant select on public.pv_today, public.pv_daily, public.pv_monthly to anon, authenticated;
 grant select on public.pv_meter_daily, public.pv_meter_monthly to anon, authenticated;
+
+-- ---------- Börsen-Spotpreise ----------
+-- Vom Collector server-seitig befüllt (Energy-Charts), damit der Browser sie
+-- nicht selbst laden muss (kein CORS-Problem). Preis in ct/kWh je Viertelstunde.
+create table if not exists public.pv_spot (
+  slot  timestamptz primary key,
+  price double precision
+);
+alter table public.pv_spot enable row level security;
+drop policy if exists "anon read pv_spot" on public.pv_spot;
+create policy "anon read pv_spot" on public.pv_spot for select to anon using (true);
+
+-- Heutige Spotpreise (Europe/Berlin); slot als lokaler Zeitstempel für die App.
+create or replace view public.pv_spot_today as
+select (slot at time zone 'Europe/Berlin') as slot, price
+from public.pv_spot
+where (slot at time zone 'Europe/Berlin')::date = (now() at time zone 'Europe/Berlin')::date
+order by slot;
+
+grant select on public.pv_spot to anon, authenticated;
+grant select on public.pv_spot_today to anon, authenticated;
