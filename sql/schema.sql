@@ -257,3 +257,14 @@ alter table public.pv_hist_curtail enable row level security;
 drop policy if exists "anon read pv_hist_curtail" on public.pv_hist_curtail;
 create policy "anon read pv_hist_curtail" on public.pv_hist_curtail for select to anon using (true);
 grant select on public.pv_hist_curtail to anon, authenticated;
+
+-- ---------- Negativpreis-Stunden je Tag (für den Bericht) ----------
+-- Anteil negativer Börsenpreis-Viertelstunden × 24 h → robust gegen 15-Min/1-Std-Auflösung.
+-- pv_spot wird vom Collector befüllt (laufend) bzw. per backfill_spot.py rückwirkend.
+create or replace view public.pv_spot_neg_daily as
+select (slot at time zone 'Europe/Berlin')::date as tag,
+       round((24.0 * sum(case when price < 0 then 1 else 0 end) / nullif(count(*),0))::numeric, 2) as neg_h
+from public.pv_spot
+group by tag
+order by tag;
+grant select on public.pv_spot_neg_daily to anon, authenticated;
