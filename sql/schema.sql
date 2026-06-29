@@ -236,3 +236,21 @@ having (max(lts) - min(lts)) >= interval '10 minutes'
 order by von;
 
 grant select on public.pv_zero_events to anon, authenticated;
+
+-- ---------- Historische Abregelung (geschätzt aus Tagessummen) ----------
+-- Für die Zeit VOR dem Live-Collector: aus dem Verhältnis beider Anlagen
+-- (gleicher Standort = gleiches Wetter) abgeleitet. Fällt eine Anlage an einem
+-- sonnigen Tag stark unter das übliche Verhältnis, war sie (teil-)abgeschaltet.
+-- expected_kwh = was die laufende Zwillingsanlage als möglich ausweist,
+-- lost_kwh = entgangene Erzeugung, sun_pct = wie sonnig der Tag war (Referenz
+-- vs. Bestwert ±20 Tage). Wird per import_curtail.sql befüllt (Schätzung!).
+create table if not exists public.pv_hist_curtail (
+  plant text, tag date,
+  actual_kwh double precision, expected_kwh double precision,
+  lost_kwh double precision, sun_pct int,
+  primary key (plant, tag)
+);
+alter table public.pv_hist_curtail enable row level security;
+drop policy if exists "anon read pv_hist_curtail" on public.pv_hist_curtail;
+create policy "anon read pv_hist_curtail" on public.pv_hist_curtail for select to anon using (true);
+grant select on public.pv_hist_curtail to anon, authenticated;
