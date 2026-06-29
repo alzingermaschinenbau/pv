@@ -177,6 +177,7 @@
     <div class="kcard" style="--ac:var(--brand)"><div class="kl">Gesamtleistung</div><hr><div class="kn" id="ro-total" style="color:var(--brand)">0</div><div class="ku"><span id="ro-total-sub">0&nbsp;%</span> der Spitze · 950 kWp</div></div>
     <div class="kcard" style="--ac:var(--blue)"><div class="kl">Verbrauch Werk</div><hr><div class="kn" id="ro-load">0</div><div class="ku">kW · Eigenverbrauchsanlage</div></div>
     <div class="kcard" style="--ac:var(--purple)"><div class="kl">Einspeisung</div><hr><div class="kn" id="ro-feed" style="color:var(--purple)">0</div><div class="ku">kW netto ins Netz</div></div>
+    <div class="kcard" style="--ac:var(--gold)"><div class="kl">Netzbezug</div><hr><div class="kn" id="ro-grid" style="color:var(--gold)">0</div><div class="ku">kW aus dem Netz</div></div>
     <div class="kcard" id="k-spot" style="--ac:var(--green)"><div class="kl">Spotpreis jetzt</div><hr><div class="kn" id="ro-spot" style="color:var(--green)">0</div><div class="ku" id="ro-spot-u">ct/kWh</div></div>
   </div>
 
@@ -292,7 +293,7 @@
     <div class="chart-box"><canvas id="chart12"></canvas></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v3</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v4</span></p>
 
 </main>
 
@@ -629,8 +630,8 @@ function paint(s,first){
   document.getElementById('hi').textContent=greeting(h);
   document.getElementById('head').innerHTML=headline(s);
 
-  if(first){countUp(document.getElementById('ro-total'),total);countUp(document.getElementById('ro-load'),s.eigen.load);countUp(document.getElementById('ro-feed'),s.eigen.feed);}
-  else{document.getElementById('ro-total').textContent=fmtKW(total);document.getElementById('ro-load').textContent=fmtKW(s.eigen.load);document.getElementById('ro-feed').textContent=fmtKW(s.eigen.feed);}
+  if(first){countUp(document.getElementById('ro-total'),total);countUp(document.getElementById('ro-load'),s.eigen.load);countUp(document.getElementById('ro-feed'),s.eigen.feed);countUp(document.getElementById('ro-grid'),s.eigen.grid);}
+  else{document.getElementById('ro-total').textContent=fmtKW(total);document.getElementById('ro-load').textContent=fmtKW(s.eigen.load);document.getElementById('ro-feed').textContent=fmtKW(s.eigen.feed);document.getElementById('ro-grid').textContent=fmtKW(s.eigen.grid);}
   document.getElementById('ro-total-sub').textContent=fmtPct(total/peak*100);
 
   // Spotpreis-KPI (Akzent nach Vorzeichen)
