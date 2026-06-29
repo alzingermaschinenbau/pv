@@ -230,12 +230,9 @@ def poll_plant(key, cfg):
         if cfg["meter"] is not None:
             if METER_SCAN:
                 scan_registers(client, cfg["meter"], METER_SCAN)
-            grid_signed = read_meter(client, cfg["meter"])   # >0 Bezug, <0 Einspeisung
-            if grid_signed is not None:
-                # Verbrauch = Erzeugung + (Bezug - Einspeisung) = p + grid_signed
-                row["load_kw"] = round(p_sum + grid_signed, 3)
-                row["feed_kw"] = round(max(0.0, -grid_signed), 3)   # Einspeisung ins Netz
-                row["grid_kw"] = round(max(0.0, grid_signed), 3)    # Netzbezug
+            # Der NAP-Zähler misst den GESAMTEN Netzanschlusspunkt (beide Anlagen).
+            # Daher wird load/feed/grid erst in main() mit der Gesamterzeugung verrechnet.
+            row["_grid_signed"] = read_meter(client, cfg["meter"])   # >0 Bezug, <0 Einspeisung
             # Zähler-kWh-Stände (nur wenn Register konfiguriert sind)
             if METER_ENERGY_ON:
                 row["import_kwh"] = read_meter_energy(client, cfg["meter"], METER_IMPORT_REG)
@@ -293,17 +290,33 @@ def main():
     while True:
         t0 = time.time()
         ts_iso = dt.datetime.now(dt.timezone.utc).isoformat()
-        rows = []
+        collected = []
         for key, cfg in PLANTS.items():
             row = poll_plant(key, cfg)
             if row:
-                rows.append(row)
-                msg = f"  {key}: {row['p_kw']} kW · {row['total_kwh']} kWh"
-                if cfg["meter"] is not None:
-                    msg += f" · Last {row['load_kw']} · Einsp {row['feed_kw']} · Bezug {row['grid_kw']}"
-                    if METER_ENERGY_ON:
-                        msg += f" · Zähler Bezug {row.get('import_kwh')} / Einsp {row.get('export_kwh')} kWh"
-                print(msg)
+                collected.append((cfg, row))
+
+        # Gesamterzeugung aller erreichbaren Anlagen (für die NAP-Zähler-Rechnung)
+        total_pv = sum(r["p_kw"] for _, r in collected)
+
+        rows = []
+        for cfg, row in collected:
+            if "_grid_signed" in row:
+                g = row.pop("_grid_signed")
+                if g is not None:
+                    # Der NAP-Zähler misst beide Anlagen am Netzanschlusspunkt:
+                    # Werksverbrauch = Gesamterzeugung + (Bezug - Einspeisung)
+                    row["load_kw"] = round(total_pv + g, 3)
+                    row["feed_kw"] = round(max(0.0, -g), 3)   # Einspeisung netto ins Netz
+                    row["grid_kw"] = round(max(0.0, g), 3)    # Netzbezug netto
+            rows.append(row)
+            msg = f"  {row['plant']}: {row['p_kw']} kW · {row['total_kwh']} kWh"
+            if cfg["meter"] is not None:
+                msg += f" · Last {row['load_kw']} · Einsp {row['feed_kw']} · Bezug {row['grid_kw']}"
+                if METER_ENERGY_ON:
+                    msg += f" · Zähler Bezug {row.get('import_kwh')} / Einsp {row.get('export_kwh')} kWh"
+            print(msg)
+
         if rows:
             try:
                 write_supabase(rows, ts_iso)
