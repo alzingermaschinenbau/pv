@@ -307,10 +307,10 @@
     <div class="card">
       <div class="chart-head"><div class="ctitle">Größte Verluste</div></div>
       <table class="tbl evtbl">
-        <thead><tr><th>Datum</th><th>Anlage</th><th>erzeugt</th><th>möglich</th><th>Verlust</th></tr></thead>
+        <thead><tr><th>Datum</th><th>Anlage</th><th>Zeit</th><th>Dauer</th><th>Verlust</th></tr></thead>
         <tbody id="hc-rows"></tbody>
       </table>
-      <p class="finehint">Schätzung: An sonnigen Tagen (☀ = Sonnenstärke der laufenden Anlage) hochgerechnet, was die abgeschaltete Anlage hätte erzeugen können. Erst ab Live-Betrieb minutengenau.</p>
+      <p class="finehint">Zeit „09:20–17:55" = minutengenau aus dem Logger-5-Min-Export. „~ Tag" = aus dem Tagesverhältnis beider Anlagen geschätzt (☀ = Sonnenstärke). „möglich" = was die Anlage bei dem Wetter erzeugt hätte.</p>
     </div>
   </div>
 
@@ -327,7 +327,7 @@
     <div class="chart-box"><canvas id="cEnergy"></canvas></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v16</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v17</span></p>
 
 </main>
 
@@ -437,9 +437,9 @@ const Demo={
             now:spotC[i],avg:spAvg,min:spMin,max:spMax,negHours:negH,negFeedKwh:negFeed,rule:EEG_RULE.voll.name},
       curtail:curtail30(),
       histCurtail:[
-        {date:new Date('2025-07-02T12:00:00'),plantKey:'voll',plant:'Volleinspeiser',actual:326,expected:3292,lost:2966,sun:88},
-        {date:new Date('2025-08-12T12:00:00'),plantKey:'voll',plant:'Volleinspeiser',actual:277,expected:3320,lost:3043,sun:90},
-        {date:new Date('2026-06-23T12:00:00'),plantKey:'voll',plant:'Volleinspeiser',actual:325,expected:3242,lost:2917,sun:85}]
+        {date:new Date('2026-06-08T12:00:00'),plantKey:'voll',plant:'Volleinspeiser',actual:659,expected:3427,lost:2768,sun:100,dauer:8.7,von:'09:20',bis:'17:55',quelle:'5min'},
+        {date:new Date('2026-06-23T12:00:00'),plantKey:'voll',plant:'Volleinspeiser',actual:325,expected:2976,lost:2651,sun:100,dauer:9.1,von:'09:00',bis:'18:00',quelle:'5min'},
+        {date:new Date('2025-08-12T12:00:00'),plantKey:'voll',plant:'Volleinspeiser',actual:277,expected:3320,lost:3043,sun:90,dauer:null,von:null,bis:null,quelle:'tag'}]
     };
   }
 };
@@ -509,7 +509,7 @@ const Supa = {
       histD   = await this._q('pv_hist_daily?select=plant,tag,gen_kwh&order=tag.asc').catch(() => []);    // importierte Historie
       histM   = await this._q('pv_hist_monthly?select=plant,monat,gen_kwh&order=monat.asc').catch(() => []);
       zeroEv  = await this._q('pv_zero_events?select=plant,von,bis,dauer_min&order=von.asc').catch(() => []);  // echte Abschaltungen (0 kW tagsüber)
-      histCur = await this._q('pv_hist_curtail?select=plant,tag,actual_kwh,expected_kwh,lost_kwh,sun_pct&order=tag.asc').catch(() => []);  // geschätzte Abregelung-Historie
+      histCur = await this._q('pv_hist_curtail?select=plant,tag,actual_kwh,expected_kwh,lost_kwh,sun_pct,dauer_h,von,bis,quelle&order=tag.asc').catch(() => []);  // Abregelung-Historie (5min/geschätzt)
       _slowCache.daily = daily; _slowCache.monthly = monthly; _slowCache.loadD = loadD; _slowCache.loadM = loadM; _slowCache.histD = histD; _slowCache.histM = histM; _slowCache.zeroEv = zeroEv; _slowCache.histCur = histCur; _slowCache.dmTs = Date.now();
     }
 
@@ -603,7 +603,8 @@ const Supa = {
     // Geschätzte Abregelung-Historie (aus Tagesdaten, vor Live-Betrieb)
     const histCurtail = (histCur || []).map(r => ({
       date: new Date((r.tag || '') + 'T12:00:00'), plantKey: r.plant, plant: PLANT_NAME[r.plant] || r.plant,
-      actual: r.actual_kwh || 0, expected: r.expected_kwh || 0, lost: r.lost_kwh || 0, sun: r.sun_pct || 0 }));
+      actual: r.actual_kwh || 0, expected: r.expected_kwh || 0, lost: r.lost_kwh || 0, sun: r.sun_pct || 0,
+      dauer: r.dauer_h, von: r.von, bis: r.bis, quelle: r.quelle }));
 
     return {
       now, liveTs,
@@ -845,9 +846,11 @@ function paint(s,first){
     document.getElementById('hc-lost').innerHTML=nf0.format(lost)+' <small>kWh</small>';
     document.getElementById('hc-voll').innerHTML=lv.length+' T · '+nf0.format(lv.reduce((a,e)=>a+e.lost,0))+' <small>kWh</small>';
     document.getElementById('hc-eigen').innerHTML=le.length+' T · '+nf0.format(le.reduce((a,e)=>a+e.lost,0))+' <small>kWh</small>';
-    document.getElementById('hc-rows').innerHTML=hc.slice().sort((a,b)=>b.lost-a.lost).slice(0,10).map(e=>
-      `<tr><td>${e.date.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'})}</td><td>${e.plant} <small>☀${e.sun}%</small></td><td>${nf0.format(e.actual)}</td><td>${nf0.format(e.expected)}</td><td class="r">${nf0.format(e.lost)}</td></tr>`
-    ).join('');}
+    document.getElementById('hc-rows').innerHTML=hc.slice().sort((a,b)=>b.lost-a.lost).slice(0,12).map(e=>{
+      const zeit=(e.quelle==='5min'&&e.von)?e.von+'–'+e.bis:'<small>~ Tag</small>';
+      const dauer=(e.dauer!=null)?nf1.format(e.dauer)+' h':'<small>–</small>';
+      return `<tr><td>${e.date.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'})}</td><td>${e.plant} <small>☀${e.sun}%</small></td><td>${zeit}</td><td>${dauer}</td><td class="r">${nf0.format(e.lost)}</td></tr>`;
+    }).join('');}
 
   if(CONFIG.mode==='supabase'){document.getElementById('srcbadge').textContent='Supabase · live';document.getElementById('livelabel').textContent='Live';}
 }
