@@ -14,6 +14,7 @@ services:
       - SUPABASE_URL=https://tppwuvizobwnnfatysdh.supabase.co
       - POLL_SECONDS=60
       - SAMPLE_SECONDS=60
+      - SPOT_SECONDS=900
       # Geheimen Key hier eintragen (sb_secret_...) ODER per .env bereitstellen:
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
       # Falls die Logger-IPs abweichen, hier setzen:

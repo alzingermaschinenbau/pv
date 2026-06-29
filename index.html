@@ -293,7 +293,7 @@
     <div class="chart-box"><canvas id="chart12"></canvas></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v5</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v6</span></p>
 
 </main>
 
@@ -477,13 +477,28 @@ const Supa = {
     const vDay = dayDB('voll')  != null ? dayDB('voll')  : vollDay;
     const eDay = dayDB('eigen') != null ? dayDB('eigen') : eigenDay;
 
-    // 4) Börsenpreise live (Energy-Charts) + Einspeise-Summenkurve
+    // 4) Börsenpreise + Einspeise-Summenkurve
     let price = new Array(N).fill(0);
     if(_slowCache.price && (Date.now() - _slowCache.spotTs) < SUPA_SPOT_TTL){
       price = _slowCache.price;
     } else {
-      try { const sp = await fetchSpotPricesDELU(now); if(sp && sp.length){ for(let k = 0; k < N; k++) price[k] = (sp[k] != null) ? sp[k] : (k > 0 ? price[k-1] : 0); _slowCache.price = price; _slowCache.spotTs = Date.now(); } }
-      catch(_){ if(_slowCache.price) price = _slowCache.price; }
+      const arr = new Array(N).fill(null);
+      let got = false;
+      // 1) Bevorzugt aus Supabase (vom Collector geloggt – kein CORS-Problem)
+      try {
+        const sp = await this._q('pv_spot_today?select=slot,price');
+        if(sp && sp.length){
+          sp.forEach(r => { const m = /T(\d\d):(\d\d)/.exec(r.slot); if(!m) return;
+            const idx = (+m[1]) * 4 + Math.floor((+m[2]) / 15); if(idx >= 0 && idx < N) arr[idx] = r.price; });
+          got = true;
+        }
+      } catch(_){}
+      // 2) Fallback: direkt von Energy-Charts (klappt nur ohne CORS-Sperre)
+      if(!got){ try { const sp = await fetchSpotPricesDELU(now); if(sp && sp.length){ for(let k = 0; k < N; k++) arr[k] = (sp[k] != null) ? sp[k] : null; got = true; } } catch(_){} }
+      if(got){
+        for(let k = 0; k < N; k++) price[k] = (arr[k] != null) ? arr[k] : (k > 0 ? price[k-1] : 0); // Lücken/Zukunft fortschreiben
+        _slowCache.price = price; _slowCache.spotTs = Date.now();
+      } else if(_slowCache.price){ price = _slowCache.price; }
     }
     const feedTot = vollC.map((x,k) => x + Math.max(0, eigenC[k] - loadC[k]));
     const past = price.slice(0, nowIdx + 1);
