@@ -240,7 +240,7 @@
   </div>
 
   <!-- Börsenstrompreis -->
-  <div class="erow" id="sec-boerse"><span class="eyebrow">Börsenstrompreis</span><span class="chint">EPEX Day-Ahead DE-LU · 15-Min</span></div>
+  <div class="erow" id="sec-boerse"><span class="eyebrow">Börsenstrompreis</span><span class="chint">EPEX DE-LU · heute &amp; morgen · 15-Min</span></div>
   <div class="card">
     <div class="tiles" style="margin-bottom:14px">
       <div class="tile"><div class="tk">Spotpreis jetzt</div><div class="tv" id="sp-now">– <small>ct/kWh</small></div><span class="pricepill" id="sp-pill">—</span></div>
@@ -293,7 +293,7 @@
     <div class="chart-box"><canvas id="chart12"></canvas></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v6</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v7</span></p>
 
 </main>
 
@@ -395,7 +395,11 @@ const Demo={
       curve:{labels:Array.from({length:N},(_,k)=>{const m=k*STEP;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}),
              voll:vollC,eigen:eigenC,load:loadC,nowIdx:i},
       daily:daily30(), monthly:monthly12(),
-      spot:{price:spotC,feedTot,now:spotC[i],avg:spAvg,min:spMin,max:spMax,negHours:negH,negFeedKwh:negFeed,rule:EEG_RULE.voll.name},
+      spot:{price:spotC,feedTot,
+            price48:spotC.concat(spotC),
+            labels48:Array.from({length:2*N},(_,k)=>{const m=(k%N)*STEP;return (k>=N?'+1 ':'')+String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}),
+            feed48:feedTot.concat(new Array(N).fill(null)),
+            now:spotC[i],avg:spAvg,min:spMin,max:spMax,negHours:negH,negFeedKwh:negFeed,rule:EEG_RULE.voll.name},
       curtail:curtail30()
     };
   }
@@ -477,30 +481,37 @@ const Supa = {
     const vDay = dayDB('voll')  != null ? dayDB('voll')  : vollDay;
     const eDay = dayDB('eigen') != null ? dayDB('eigen') : eigenDay;
 
-    // 4) Börsenpreise + Einspeise-Summenkurve
+    // 4) Börsenpreise (heute + morgen, 48 h) + Einspeise-Summenkurve
+    const pad2 = n => String(n).padStart(2,'0');
+    const labels48 = Array.from({ length: 2*N }, (_, k) => { const mm = (k % N) * STEP; return (k >= N ? '+1 ' : '') + pad2(Math.floor(mm/60)) + ':' + pad2(mm%60); });
     let price = new Array(N).fill(0);
+    let price48 = new Array(2*N).fill(null);
     if(_slowCache.price && (Date.now() - _slowCache.spotTs) < SUPA_SPOT_TTL){
-      price = _slowCache.price;
+      price = _slowCache.price; price48 = _slowCache.price48 || price48;
     } else {
-      const arr = new Array(N).fill(null);
+      const todayK = `${now.getFullYear()}-${pad2(now.getMonth()+1)}-${pad2(now.getDate())}`;
+      const tmr = new Date(now); tmr.setDate(now.getDate()+1);
+      const tmrK = `${tmr.getFullYear()}-${pad2(tmr.getMonth()+1)}-${pad2(tmr.getDate())}`;
       let got = false;
       // 1) Bevorzugt aus Supabase (vom Collector geloggt – kein CORS-Problem)
       try {
-        const sp = await this._q('pv_spot_today?select=slot,price');
-        if(sp && sp.length){
-          sp.forEach(r => { const m = /T(\d\d):(\d\d)/.exec(r.slot); if(!m) return;
-            const idx = (+m[1]) * 4 + Math.floor((+m[2]) / 15); if(idx >= 0 && idx < N) arr[idx] = r.price; });
+        const sw = await this._q('pv_spot_window?select=slot,price');
+        if(sw && sw.length){
+          sw.forEach(r => { const m = /(\d{4}-\d\d-\d\d)T(\d\d):(\d\d)/.exec(r.slot); if(!m) return;
+            const off = m[1] === todayK ? 0 : (m[1] === tmrK ? 1 : -1); if(off < 0) return;
+            const idx = off*N + (+m[2])*4 + Math.floor((+m[3])/15); if(idx >= 0 && idx < 2*N) price48[idx] = r.price; });
           got = true;
         }
       } catch(_){}
       // 2) Fallback: direkt von Energy-Charts (klappt nur ohne CORS-Sperre)
-      if(!got){ try { const sp = await fetchSpotPricesDELU(now); if(sp && sp.length){ for(let k = 0; k < N; k++) arr[k] = (sp[k] != null) ? sp[k] : null; got = true; } } catch(_){} }
+      if(!got){ try { const sp = await fetchSpotPricesDELU(now); if(sp && sp.length){ for(let k = 0; k < N; k++) price48[k] = (sp[k] != null) ? sp[k] : null; got = true; } } catch(_){} }
       if(got){
-        for(let k = 0; k < N; k++) price[k] = (arr[k] != null) ? arr[k] : (k > 0 ? price[k-1] : 0); // Lücken/Zukunft fortschreiben
-        _slowCache.price = price; _slowCache.spotTs = Date.now();
-      } else if(_slowCache.price){ price = _slowCache.price; }
+        for(let k = 0; k < N; k++) price[k] = (price48[k] != null) ? price48[k] : (k > 0 ? price[k-1] : 0); // heute mit Fortschreibung
+        _slowCache.price = price; _slowCache.price48 = price48; _slowCache.spotTs = Date.now();
+      } else if(_slowCache.price){ price = _slowCache.price; price48 = _slowCache.price48 || price48; }
     }
     const feedTot = vollC.map((x,k) => x + Math.max(0, eigenC[k] - loadC[k]));
+    const feed48 = feedTot.concat(new Array(N).fill(null));   // Einspeisung nur heute
     const past = price.slice(0, nowIdx + 1);
     const spAvg = past.length ? past.reduce((a,b) => a + b, 0) / past.length : 0;
     const spMin = past.length ? Math.min(...past) : 0, spMax = past.length ? Math.max(...past) : 0;
@@ -518,7 +529,7 @@ const Supa = {
       curve: { labels, voll: vollC, eigen: eigenC, load: loadC, nowIdx },
       daily: dailyArr,
       monthly: monthlyArr,
-      spot: { price, feedTot, now: price[nowIdx] || 0, avg: spAvg, min: spMin, max: spMax, negHours: negH, negFeedKwh: negFeed, rule: EEG_RULE.voll.name },
+      spot: { price, feedTot, price48, labels48, feed48, now: price[nowIdx] || 0, avg: spAvg, min: spMin, max: spMax, negHours: negH, negFeedKwh: negFeed, rule: EEG_RULE.voll.name },
       curtail: deriveCurtail(price, feedTot, labels, nowIdx, now)
     };
   }
@@ -598,17 +609,17 @@ function buildCharts(s){
       plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.label+': '+nf1.format(c.parsed.y)+' MWh'}}},
       scales:{x:{grid:{display:false},border:{display:false}},y:{...axM('MWh')}}}});
 
-  // Börsenpreis vs Einspeisung – mit Negativpreis-Bändern
+  // Börsenpreis (heute + morgen, 48 h) vs Einspeisung – mit Negativpreis-Bändern
   const negBands={id:'negBands',beforeDatasetsDraw(ch){const sp=ch.$spot;if(!sp||!ch.chartArea)return;
-    const {ctx,chartArea:a,scales:{x}}=ch;const w=x.getPixelForValue(1)-x.getPixelForValue(0);
+    const p=sp.price48||sp.price;const {ctx,chartArea:a,scales:{x}}=ch;const w=x.getPixelForValue(1)-x.getPixelForValue(0);
     ctx.save();ctx.fillStyle='rgba(203,42,36,.12)';
-    for(let k=0;k<sp.price.length;k++){if(sp.price[k]<0)ctx.fillRect(x.getPixelForValue(k)-w/2,a.top,w,a.bottom-a.top);}ctx.restore();}};
+    for(let k=0;k<p.length;k++){if(p[k]!=null&&p[k]<0)ctx.fillRect(x.getPixelForValue(k)-w/2,a.top,w,a.bottom-a.top);}ctx.restore();}};
   cPrice=new Chart(document.getElementById('chartPrice'),{type:'line',
-    data:{labels:s.curve.labels,datasets:[
-      {label:'Einspeisung',data:s.spot.feedTot,yAxisID:'y',borderColor:GOLD,backgroundColor:'rgba(200,136,31,.14)',fill:true,tension:.4,pointRadius:0,borderWidth:2.2},
-      {label:'Spotpreis',data:s.spot.price,yAxisID:'y1',borderColor:BLUE,fill:false,tension:.3,pointRadius:0,borderWidth:2.2}]},
+    data:{labels:s.spot.labels48,datasets:[
+      {label:'Einspeisung',data:s.spot.feed48,yAxisID:'y',borderColor:GOLD,backgroundColor:'rgba(200,136,31,.14)',fill:true,tension:.4,pointRadius:0,borderWidth:2.2},
+      {label:'Spotpreis',data:s.spot.price48,yAxisID:'y1',borderColor:BLUE,fill:false,tension:.3,pointRadius:0,borderWidth:2.2,spanGaps:true}]},
     options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.yAxisID==='y1'?c.dataset.label+': '+nf1.format(c.parsed.y)+' ct/kWh':c.dataset.label+': '+nf0.format(c.parsed.y)+' kW'}}},
+      plugins:{legend:{display:false},tooltip:{callbacks:{title:c=>c[0].label.replace('+1 ','morgen '),label:c=>c.dataset.yAxisID==='y1'?c.dataset.label+': '+nf1.format(c.parsed.y)+' ct/kWh':c.dataset.label+': '+nf0.format(c.parsed.y)+' kW'}}},
       scales:{x:{grid:{display:false},border:{display:false},ticks:{maxTicksLimit:9}},
               y:{position:'left',...axM('kW')},
               y1:{position:'right',grid:{drawOnChartArea:false},border:{display:false},title:{display:true,text:'ct/kWh',color:BLUE},ticks:{callback:v=>nf0.format(v),color:BLUE}}}},
@@ -729,7 +740,8 @@ async function start(){
   setInterval(tickClock,1000);tickClock();
   const every=CONFIG.mode==='supabase'?10000:3000;
   setInterval(async()=>{let u;try{u=await Source.snapshot();}catch(_){u=await Demo.snapshot();}paint(u,false);
-    if(CONFIG.mode==='supabase'){cDay.data.datasets[0].data=u.curve.voll;cDay.data.datasets[1].data=u.curve.eigen;cDay.data.datasets[2].data=u.curve.load;cDay.update('none');}},every);
+    if(CONFIG.mode==='supabase'){cDay.data.datasets[0].data=u.curve.voll;cDay.data.datasets[1].data=u.curve.eigen;cDay.data.datasets[2].data=u.curve.load;cDay.update('none');
+      cPrice.data.labels=u.spot.labels48;cPrice.data.datasets[0].data=u.spot.feed48;cPrice.data.datasets[1].data=u.spot.price48;cPrice.$spot=u.spot;cPrice.update('none');}},every);
 }
 start();
 </script>
