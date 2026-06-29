@@ -244,10 +244,13 @@ grant select on public.pv_zero_events to anon, authenticated;
 -- expected_kwh = was die laufende Zwillingsanlage als möglich ausweist,
 -- lost_kwh = entgangene Erzeugung, sun_pct = wie sonnig der Tag war (Referenz
 -- vs. Bestwert ±20 Tage). Wird per import_curtail.sql befüllt (Schätzung!).
+-- quelle='5min' = minutengenau aus Logger-5-Min-Export (Uhrzeit/Dauer exakt),
+-- quelle='tag'  = aus dem Tagesverhältnis beider Anlagen geschätzt (keine Uhrzeit).
 create table if not exists public.pv_hist_curtail (
   plant text, tag date,
   actual_kwh double precision, expected_kwh double precision,
   lost_kwh double precision, sun_pct int,
+  dauer_h double precision, von text, bis text, quelle text,
   primary key (plant, tag)
 );
 alter table public.pv_hist_curtail enable row level security;
