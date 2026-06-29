@@ -292,7 +292,7 @@
     <div class="chart-box"><canvas id="chart12"></canvas></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 30&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v2</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v3</span></p>
 
 </main>
 
@@ -404,6 +404,12 @@ const Demo={
    Liest pv_live (aktueller Stand), pv_today (15-Min-Kurve heute),
    pv_daily / pv_monthly (Historie). Spotpreise live von Energy-Charts.
    Liefert exakt dieselbe Struktur wie Demo.snapshot(). */
+/* Cache für langsam veränderliche Daten – bei 10-Sek-Takt nicht bei jedem
+   Aufruf neu laden (schont Supabase und die Spotpreis-API). */
+const _slowCache = { dmTs: 0, daily: null, monthly: null, spotTs: 0, price: null };
+const SUPA_DM_TTL   = 300000;   // Tages-/Monatswerte alle 5 Min
+const SUPA_SPOT_TTL = 600000;   // Spotpreise alle 10 Min (15-Min-Daten)
+
 const Supa = {
   _hdr(){ return { apikey: CONFIG.supabaseAnonKey, Authorization: 'Bearer ' + CONFIG.supabaseAnonKey }; },
   async _q(path){
@@ -443,8 +449,14 @@ const Supa = {
     }
 
     // 3) Tages- und Monatsenergie (30-Tage / 12-Monate / Monat / Jahr)
-    const daily   = await this._q('pv_daily?select=plant,tag,gen_kwh&order=tag.asc').catch(() => []);
-    const monthly = await this._q('pv_monthly?select=plant,monat,gen_kwh&order=monat.asc').catch(() => []);
+    let daily, monthly;
+    if(_slowCache.daily && (Date.now() - _slowCache.dmTs) < SUPA_DM_TTL){
+      daily = _slowCache.daily; monthly = _slowCache.monthly;
+    } else {
+      daily   = await this._q('pv_daily?select=plant,tag,gen_kwh&order=tag.asc').catch(() => []);
+      monthly = await this._q('pv_monthly?select=plant,monat,gen_kwh&order=monat.asc').catch(() => []);
+      _slowCache.daily = daily; _slowCache.monthly = monthly; _slowCache.dmTs = Date.now();
+    }
 
     const dmap = {};
     daily.forEach(r => { const o = dmap[r.tag] = dmap[r.tag] || { date: new Date(r.tag + 'T12:00:00'), voll: 0, eigen: 0 }; o[r.plant] = Math.round(r.gen_kwh || 0); });
@@ -466,7 +478,12 @@ const Supa = {
 
     // 4) Börsenpreise live (Energy-Charts) + Einspeise-Summenkurve
     let price = new Array(N).fill(0);
-    try { const sp = await fetchSpotPricesDELU(now); if(sp && sp.length) for(let k = 0; k < N; k++) price[k] = (sp[k] != null) ? sp[k] : (k > 0 ? price[k-1] : 0); } catch(_){}
+    if(_slowCache.price && (Date.now() - _slowCache.spotTs) < SUPA_SPOT_TTL){
+      price = _slowCache.price;
+    } else {
+      try { const sp = await fetchSpotPricesDELU(now); if(sp && sp.length){ for(let k = 0; k < N; k++) price[k] = (sp[k] != null) ? sp[k] : (k > 0 ? price[k-1] : 0); _slowCache.price = price; _slowCache.spotTs = Date.now(); } }
+      catch(_){ if(_slowCache.price) price = _slowCache.price; }
+    }
     const feedTot = vollC.map((x,k) => x + Math.max(0, eigenC[k] - loadC[k]));
     const past = price.slice(0, nowIdx + 1);
     const spAvg = past.length ? past.reduce((a,b) => a + b, 0) / past.length : 0;
@@ -692,7 +709,7 @@ async function start(){
   let s;try{s=await Source.snapshot();}catch(e){document.getElementById('livelabel').textContent='Demo';s=await Demo.snapshot();}
   buildCharts(s);paint(s,true);
   setInterval(tickClock,1000);tickClock();
-  const every=CONFIG.mode==='supabase'?30000:3000;
+  const every=CONFIG.mode==='supabase'?10000:3000;
   setInterval(async()=>{let u;try{u=await Source.snapshot();}catch(_){u=await Demo.snapshot();}paint(u,false);
     if(CONFIG.mode==='supabase'){cDay.data.datasets[0].data=u.curve.voll;cDay.data.datasets[1].data=u.curve.eigen;cDay.data.datasets[2].data=u.curve.load;cDay.update('none');}},every);
 }

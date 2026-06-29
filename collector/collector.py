@@ -64,6 +64,11 @@ REG_WR_TOTAL  = 32114   # Gesamtertrag,                u32, /100  -> kWh
 REG_METER_PWR = 32278   # Wirkleistung Zähler, i32, W; >0 Netzbezug, <0 Einspeisung
 
 POLL_SECONDS = int(os.getenv("POLL_SECONDS", "60"))
+# Wie oft die Zeitreihe (pv_samples) geschrieben wird. pv_live (aktueller Stand)
+# wird IMMER bei jedem Tick aktualisiert. So kann man sehr schnell pollen
+# (z.B. POLL_SECONDS=10 für eine flotte Live-Anzeige), ohne die Historie/DB
+# mit zu vielen Zeilen zu fluten.
+SAMPLE_SECONDS = int(os.getenv("SAMPLE_SECONDS", "60"))
 MODBUS_TIMEOUT = 5
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
@@ -256,10 +261,9 @@ def _headers():
     }
 
 
-def write_supabase(rows, ts_iso):
-    """Upsert nach pv_live und Insert in pv_samples für alle Anlagen."""
+def write_supabase(rows, ts_iso, with_samples=True):
+    """Upsert nach pv_live (immer) und optional Insert in pv_samples (Zeitreihe)."""
     live = [{**r, "ts": ts_iso} for r in rows]
-    samples = [{**r, "ts": ts_iso} for r in rows]
 
     # pv_live: Upsert auf Primärschlüssel plant
     r1 = requests.post(
@@ -271,14 +275,15 @@ def write_supabase(rows, ts_iso):
     if not r1.ok:
         print(f"  ! pv_live {r1.status_code}: {r1.text[:200]}")
 
-    # pv_samples: reiner Insert (Zeitreihe)
-    r2 = requests.post(
-        f"{SUPABASE_URL}/rest/v1/pv_samples",
-        headers=_headers(),
-        json=samples, timeout=15,
-    )
-    if not r2.ok:
-        print(f"  ! pv_samples {r2.status_code}: {r2.text[:200]}")
+    # pv_samples: reiner Insert (Zeitreihe) – nur im Sample-Takt, nicht jeden Tick
+    if with_samples:
+        r2 = requests.post(
+            f"{SUPABASE_URL}/rest/v1/pv_samples",
+            headers=_headers(),
+            json=live, timeout=15,
+        )
+        if not r2.ok:
+            print(f"  ! pv_samples {r2.status_code}: {r2.text[:200]}")
 
 
 # ---------- Hauptschleife ----------
@@ -286,7 +291,8 @@ def main():
     if not SUPABASE_URL or not SUPABASE_KEY:
         sys.exit("SUPABASE_URL und SUPABASE_SERVICE_KEY müssen gesetzt sein.")
 
-    print(f"Collector gestartet · Intervall {POLL_SECONDS}s · Ziel {SUPABASE_URL}")
+    print(f"Collector gestartet · Poll {POLL_SECONDS}s · Sample {SAMPLE_SECONDS}s · Ziel {SUPABASE_URL}")
+    last_sample = 0.0
     while True:
         t0 = time.time()
         ts_iso = dt.datetime.now(dt.timezone.utc).isoformat()
@@ -318,8 +324,11 @@ def main():
             print(msg)
 
         if rows:
+            do_sample = (t0 - last_sample) >= SAMPLE_SECONDS
             try:
-                write_supabase(rows, ts_iso)
+                write_supabase(rows, ts_iso, with_samples=do_sample)
+                if do_sample:
+                    last_sample = t0
             except Exception as e:               # noqa: BLE001
                 print(f"  ! Supabase-Schreibfehler: {e}")
 
