@@ -323,6 +323,7 @@
   <div class="erow" id="sec-mehr"><span class="eyebrow">Energieertrag</span>
     <div class="seg" id="energyToggle">
       <button data-range="days" class="active">Tage</button>
+      <button data-range="weeks">Wochen</button>
       <button data-range="months">Monate</button>
       <button data-range="years">Jahre</button>
     </div>
@@ -334,12 +335,12 @@
       <input type="date" id="dFrom" aria-label="von">
       <span class="drsep">–</span>
       <input type="date" id="dTo" aria-label="bis">
-      <button id="dReset" type="button">letzte 30 Tage</button>
+      <button id="dReset" type="button">Zurücksetzen</button>
     </div>
     <div class="chart-box"><canvas id="cEnergy"></canvas></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v18</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v19</span></p>
 
 </main>
 
@@ -749,32 +750,46 @@ function buildCharts(s){
       scales:{x:{stacked:true,grid:{display:false},border:{display:false},ticks:{maxTicksLimit:12}},y:{stacked:true,...axM('MWh entgangen')}}}});
 }
 
-/* Energie-Chart je nach Filter (Tage / Monate / Jahre) neu zeichnen */
+/* Energie-Auswertung: Kalender (von–bis) + Gruppierung (Tage/Wochen/Monate/Jahre).
+   Alles wird aus der kompletten Tageshistorie aggregiert. */
 const dKey=dt=>`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+const MONS=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+function isoWeek(d){
+  const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  const day=t.getUTCDay()||7; t.setUTCDate(t.getUTCDate()+4-day);
+  const ys=new Date(Date.UTC(t.getUTCFullYear(),0,1));
+  return [t.getUTCFullYear(), Math.ceil((((t-ys)/86400000)+1)/7)];
+}
 function renderEnergy(range){
   if(!cEnergy || !lastSnap) return;
   energyRange = range;
-  const s = lastSnap;
-  const dr = document.getElementById('dateRange'); if(dr) dr.style.display = range==='days' ? 'flex' : 'none';
-  let src, labels, unit, hint, div;
-  if(range==='months'){ src=s.monthly||[]; labels=src.map(m=>m.label); unit='MWh'; hint='MWh / Monat'; div=1000; }
-  else if(range==='years'){ src=s.yearly||[]; labels=src.map(y=>y.label); unit='MWh'; hint='MWh / Jahr'; div=1000; }
-  else {
-    const all=s.dailyAll||s.daily||[];
-    if(energyFrom||energyTo){
-      src=all.filter(d=>{const k=dKey(d.date); return (!energyFrom||k>=energyFrom)&&(!energyTo||k<=energyTo);});
-      hint=src.length+' Tage';
-    } else { src=all.slice(-30); hint='kWh / Tag · letzte 30'; }
-    labels=src.map(d=>d.date.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}));
-    unit='kWh'; div=1;
+  const dr = document.getElementById('dateRange'); if(dr) dr.style.display = 'flex';  // Kalender immer verfügbar
+  const all = lastSnap.dailyAll || lastSnap.daily || [];
+  // 1) Kalender-Zeitraum anwenden (falls gesetzt)
+  let rows = all;
+  if(energyFrom || energyTo) rows = all.filter(d=>{ const k=dKey(d.date); return (!energyFrom||k>=energyFrom) && (!energyTo||k<=energyTo); });
+  // 2) nach gewählter Einteilung bündeln
+  const buckets = new Map();
+  const add=(key,label,d)=>{ const o=buckets.get(key)||{label,voll:0,eigen:0}; o.voll+=d.voll||0; o.eigen+=d.eigen||0; buckets.set(key,o); };
+  for(const d of rows){ const dt=d.date;
+    if(range==='weeks'){ const [wy,wk]=isoWeek(dt); add(wy+'-W'+String(wk).padStart(2,'0'),'KW'+wk,d); }
+    else if(range==='months'){ add(`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`, MONS[dt.getMonth()]+' '+String(dt.getFullYear()).slice(2), d); }
+    else if(range==='years'){ add(String(dt.getFullYear()), String(dt.getFullYear()), d); }
+    else { add(dKey(dt), dt.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}), d); }
   }
-  cEnergy.data.labels = labels;
-  cEnergy.data.datasets[0].data = src.map(d=>+(d.voll/div).toFixed(div===1?0:1));
-  cEnergy.data.datasets[1].data = src.map(d=>+(d.eigen/div).toFixed(div===1?0:1));
+  let arr=[...buckets.entries()].sort((a,b)=>a[0]<b[0]?-1:1).map(e=>e[1]);
+  // 3) ohne Kalender: sinnvolles Standardfenster
+  if(!(energyFrom||energyTo)){ const n = range==='days'?30 : range==='weeks'?16 : range==='months'?12 : 99; arr=arr.slice(-n); }
+  const mwh = range!=='days';
+  const div = mwh?1000:1, unit = mwh?'MWh':'kWh';
+  const gl = {days:'Tag',weeks:'Woche',months:'Monat',years:'Jahr'}[range];
+  cEnergy.data.labels = arr.map(b=>b.label);
+  cEnergy.data.datasets[0].data = arr.map(b=>+(b.voll/div).toFixed(mwh?1:0));
+  cEnergy.data.datasets[1].data = arr.map(b=>+(b.eigen/div).toFixed(mwh?1:0));
   cEnergy.$unit = unit;
   cEnergy.options.scales.y.title.text = unit;
   cEnergy.update();
-  const he = document.getElementById('energyHint'); if(he) he.textContent = hint;
+  const he = document.getElementById('energyHint'); if(he) he.textContent = `${unit} / ${gl}${(energyFrom||energyTo)?' · '+arr.length:''}`;
   document.querySelectorAll('#energyToggle button').forEach(b=>b.classList.toggle('active', b.dataset.range===range));
 }
 
@@ -908,9 +923,9 @@ document.querySelectorAll('#energyToggle button').forEach(b=>b.addEventListener(
 (function(){
   const f=document.getElementById('dFrom'), t=document.getElementById('dTo'), r=document.getElementById('dReset');
   if(!f) return;
-  const apply=()=>{ energyFrom=f.value||''; energyTo=t.value||''; renderEnergy('days'); };
+  const apply=()=>{ energyFrom=f.value||''; energyTo=t.value||''; renderEnergy(energyRange); };
   f.addEventListener('change',apply); t.addEventListener('change',apply);
-  r.addEventListener('click',()=>{ f.value=''; t.value=''; energyFrom=''; energyTo=''; renderEnergy('days'); });
+  r.addEventListener('click',()=>{ f.value=''; t.value=''; energyFrom=''; energyTo=''; renderEnergy(energyRange); });
 })();
 
 /* ============================================================
