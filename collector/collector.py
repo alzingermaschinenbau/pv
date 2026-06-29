@@ -295,10 +295,12 @@ def fetch_and_store_spot():
     Läuft server-seitig im Collector -> kein CORS-Problem im Browser."""
     try:
         from zoneinfo import ZoneInfo
-        d = dt.datetime.now(ZoneInfo("Europe/Berlin")).strftime("%Y-%m-%d")
+        now_local = dt.datetime.now(ZoneInfo("Europe/Berlin"))
     except Exception:                                # noqa: BLE001  (z.B. Windows ohne tzdata)
-        d = dt.datetime.now().strftime("%Y-%m-%d")
-    url = f"https://api.energy-charts.info/price?bzn={SPOT_BZN}&start={d}&end={d}"
+        now_local = dt.datetime.now()
+    d  = now_local.strftime("%Y-%m-%d")
+    d2 = (now_local + dt.timedelta(days=1)).strftime("%Y-%m-%d")   # heute + morgen
+    url = f"https://api.energy-charts.info/price?bzn={SPOT_BZN}&start={d}&end={d2}"
     try:
         r = requests.get(url, timeout=15)
         if not r.ok:

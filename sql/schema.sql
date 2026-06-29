@@ -146,5 +146,13 @@ from public.pv_spot
 where (slot at time zone 'Europe/Berlin')::date = (now() at time zone 'Europe/Berlin')::date
 order by slot;
 
+-- Spotpreise heute + morgen (48 h) für die Vorschau-Kurve
+create or replace view public.pv_spot_window as
+select (slot at time zone 'Europe/Berlin') as slot, price
+from public.pv_spot
+where (slot at time zone 'Europe/Berlin') >= date_trunc('day', now() at time zone 'Europe/Berlin')
+  and (slot at time zone 'Europe/Berlin') <  date_trunc('day', now() at time zone 'Europe/Berlin') + interval '2 days'
+order by slot;
+
 grant select on public.pv_spot to anon, authenticated;
-grant select on public.pv_spot_today to anon, authenticated;
+grant select on public.pv_spot_today, public.pv_spot_window to anon, authenticated;
