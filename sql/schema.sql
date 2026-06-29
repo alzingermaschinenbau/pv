@@ -128,6 +128,31 @@ grant select on public.pv_live, public.pv_samples to anon, authenticated;
 grant select on public.pv_today, public.pv_daily, public.pv_monthly to anon, authenticated;
 grant select on public.pv_meter_daily, public.pv_meter_monthly to anon, authenticated;
 
+-- ---------- Werksverbrauch (Energie aus der Verbrauchsleistung) ----------
+-- Zeitgewichtete Integration von load_kw (Anlage 'eigen'); Lücken auf max. 5 Min
+-- begrenzt, damit Ausfälle die Summe nicht aufblähen. Ergebnis in kWh.
+create or replace view public.pv_load_daily as
+with s as (
+  select ts, load_kw, lead(ts) over (order by ts) as ts_next
+  from public.pv_samples where plant = 'eigen' and load_kw is not null
+)
+select (ts at time zone 'Europe/Berlin')::date as tag,
+       sum(load_kw * extract(epoch from (least(ts_next, ts + interval '5 minutes') - ts)) / 3600.0) as load_kwh
+from s where ts_next is not null
+group by tag order by tag;
+
+create or replace view public.pv_load_monthly as
+with s as (
+  select ts, load_kw, lead(ts) over (order by ts) as ts_next
+  from public.pv_samples where plant = 'eigen' and load_kw is not null
+)
+select to_char(ts at time zone 'Europe/Berlin', 'YYYY-MM') as monat,
+       sum(load_kw * extract(epoch from (least(ts_next, ts + interval '5 minutes') - ts)) / 3600.0) as load_kwh
+from s where ts_next is not null
+group by monat order by monat;
+
+grant select on public.pv_load_daily, public.pv_load_monthly to anon, authenticated;
+
 -- ---------- Börsen-Spotpreise ----------
 -- Vom Collector server-seitig befüllt (Energy-Charts), damit der Browser sie
 -- nicht selbst laden muss (kein CORS-Problem). Preis in ct/kWh je Viertelstunde.

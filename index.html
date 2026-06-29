@@ -219,6 +219,7 @@
         <div class="tile"><div class="tk"><span class="swatch" style="background:var(--green)"></span>Eigenverbrauch</div><div class="tv" id="b-eigen">0<small>kWh</small></div></div>
         <div class="tile"><div class="tk"><span class="swatch" style="background:var(--brand)"></span>Einspeisung</div><div class="tv" id="b-feed">0<small>kWh</small></div></div>
         <div class="tile"><div class="tk"><span class="swatch" style="background:var(--gold)"></span>Netzbezug</div><div class="tv" id="b-bezug">0<small>kWh</small></div></div>
+        <div class="tile"><div class="tk"><span class="swatch" style="background:var(--blue)"></span>Werksverbrauch heute</div><div class="tv" id="b-load">0<small>kWh</small></div></div>
         <div class="tile"><div class="tk">Autarkiegrad</div><div class="tv" id="autarkie">0<small>%</small></div></div>
       </div>
     </div>
@@ -233,6 +234,8 @@
             <td><span id="t-eigen-now">0</span> kW</td><td id="t-eigen-day">0</td><td id="t-eigen-mon">0</td><td id="t-eigen-yr">0</td></tr>
           <tr class="sum"><td>Gesamt</td>
             <td><span id="t-sum-now">0</span> kW</td><td id="t-sum-day">0</td><td id="t-sum-mon">0</td><td id="t-sum-yr">0</td></tr>
+          <tr><td><div class="pname"><b style="background:var(--blue)"></b><span>Werksverbrauch<small>Eigenverbrauchsanlage</small></span></div></td>
+            <td><span id="t-load-now">0</span> kW</td><td id="t-load-day">0</td><td id="t-load-mon">0</td><td id="t-load-yr">0</td></tr>
         </tbody>
       </table>
       <div style="margin-top:12px"><span class="ok"><i></i>Beide Anlagen normal · keine Störung</span></div>
@@ -293,7 +296,7 @@
     <div class="chart-box"><canvas id="chart12"></canvas></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v7</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v8</span></p>
 
 </main>
 
@@ -390,7 +393,7 @@ const Demo={
       now:this.now(),
       voll:{kw:vollKw,day:vollDay,month:84500,year:352000,kwp:615},
       eigen:{kw:pvKw,load:loadKw,feed:feedKw,grid:gridKw,day:pvDay,month:46000,year:191000,kwp:335,
-             selfKwh:self,feedKwh:feed,gridKwh:grid,loadDay:loadDay,
+             selfKwh:self,feedKwh:feed,gridKwh:grid,loadDay:loadDay,loadMonth:38000,loadYear:152000,
              quote:pvDay>0?self/pvDay*100:0,autarkie:loadDay>0?self/loadDay*100:0},
       curve:{labels:Array.from({length:N},(_,k)=>{const m=k*STEP;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}),
              voll:vollC,eigen:eigenC,load:loadC,nowIdx:i},
@@ -453,14 +456,16 @@ const Supa = {
       selfKwh += Math.max(0, Math.min(eigenC[k], loadC[k])) * Hh;
     }
 
-    // 3) Tages- und Monatsenergie (30-Tage / 12-Monate / Monat / Jahr)
-    let daily, monthly;
+    // 3) Tages- und Monatsenergie (30-Tage / 12-Monate / Monat / Jahr) + Werksverbrauch
+    let daily, monthly, loadD, loadM;
     if(_slowCache.daily && (Date.now() - _slowCache.dmTs) < SUPA_DM_TTL){
-      daily = _slowCache.daily; monthly = _slowCache.monthly;
+      daily = _slowCache.daily; monthly = _slowCache.monthly; loadD = _slowCache.loadD; loadM = _slowCache.loadM;
     } else {
       daily   = await this._q('pv_daily?select=plant,tag,gen_kwh&order=tag.asc').catch(() => []);
       monthly = await this._q('pv_monthly?select=plant,monat,gen_kwh&order=monat.asc').catch(() => []);
-      _slowCache.daily = daily; _slowCache.monthly = monthly; _slowCache.dmTs = Date.now();
+      loadD   = await this._q('pv_load_daily?select=tag,load_kwh&order=tag.asc').catch(() => []);
+      loadM   = await this._q('pv_load_monthly?select=monat,load_kwh&order=monat.asc').catch(() => []);
+      _slowCache.daily = daily; _slowCache.monthly = monthly; _slowCache.loadD = loadD; _slowCache.loadM = loadM; _slowCache.dmTs = Date.now();
     }
 
     const dmap = {};
@@ -480,6 +485,12 @@ const Supa = {
     const dayDB  = p => { const r = daily.find(x => x.plant === p && x.tag === todayKey); return r ? r.gen_kwh : null; };
     const vDay = dayDB('voll')  != null ? dayDB('voll')  : vollDay;
     const eDay = dayDB('eigen') != null ? dayDB('eigen') : eigenDay;
+
+    // Werksverbrauch (kWh): Tag aus DB (sonst Intraday), Monat/Jahr aus Verbrauchs-View
+    const loadDayRow = (loadD || []).find(r => r.tag === todayKey);
+    const loadDayE = loadDayRow != null ? loadDayRow.load_kwh : loadDay;
+    const loadMon  = (loadM || []).filter(r => r.monat === curMon).reduce((a,b) => a + (b.load_kwh || 0), 0);
+    const loadYr   = (loadM || []).filter(r => r.monat.startsWith(curYr)).reduce((a,b) => a + (b.load_kwh || 0), 0);
 
     // 4) Börsenpreise (heute + morgen, 48 h) + Einspeise-Summenkurve
     const pad2 = n => String(n).padStart(2,'0');
@@ -524,7 +535,7 @@ const Supa = {
       voll:  { kw: v.p_kw || 0, day: vDay, month: sumMon('voll'), year: sumYr('voll'), kwp: CONFIG.plants.voll.kwp },
       eigen: { kw: e.p_kw || 0, load: e.load_kw || 0, feed: e.feed_kw || 0, grid: e.grid_kw || 0,
                day: eDay, month: sumMon('eigen'), year: sumYr('eigen'), kwp: CONFIG.plants.eigen.kwp,
-               selfKwh, feedKwh, gridKwh, loadDay,
+               selfKwh, feedKwh, gridKwh, loadDay: loadDayE, loadMonth: loadMon, loadYear: loadYr,
                quote: eDay > 0 ? selfKwh / eDay * 100 : 0, autarkie: loadDay > 0 ? selfKwh / loadDay * 100 : 0 },
       curve: { labels, voll: vollC, eigen: eigenC, load: loadC, nowIdx },
       daily: dailyArr,
@@ -684,12 +695,14 @@ function paint(s,first){
   document.getElementById('b-eigen').innerHTML=nf0.format(s.eigen.selfKwh)+'<small>kWh</small>';
   document.getElementById('b-feed').innerHTML=nf0.format(s.eigen.feedKwh)+'<small>kWh</small>';
   document.getElementById('b-bezug').innerHTML=nf0.format(s.eigen.gridKwh)+'<small>kWh</small>';
+  document.getElementById('b-load').innerHTML=nf0.format(s.eigen.loadDay||0)+'<small>kWh</small>';
 
   // Tabelle
   const set=(id,v)=>document.getElementById(id).textContent=v;
   set('t-voll-now',fmtKW(s.voll.kw));set('t-voll-day',fmtKWh(s.voll.day));set('t-voll-mon',fmtKWh(s.voll.month));set('t-voll-yr',fmtKWh(s.voll.year));
   set('t-eigen-now',fmtKW(s.eigen.kw));set('t-eigen-day',fmtKWh(s.eigen.day));set('t-eigen-mon',fmtKWh(s.eigen.month));set('t-eigen-yr',fmtKWh(s.eigen.year));
   set('t-sum-now',fmtKW(total));set('t-sum-day',fmtKWh(s.voll.day+s.eigen.day));set('t-sum-mon',fmtKWh(s.voll.month+s.eigen.month));set('t-sum-yr',fmtKWh(s.voll.year+s.eigen.year));
+  set('t-load-now',fmtKW(s.eigen.load));set('t-load-day',fmtKWh(s.eigen.loadDay||0));set('t-load-mon',fmtKWh(s.eigen.loadMonth||0));set('t-load-yr',fmtKWh(s.eigen.loadYear||0));
 
   // Börsenstrompreis
   if(s.spot){const sp=s.spot, neg=sp.now<0;
