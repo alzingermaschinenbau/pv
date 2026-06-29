@@ -293,7 +293,7 @@
     <div class="chart-box"><canvas id="chart12"></canvas></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v4</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v5</span></p>
 
 </main>
 
@@ -514,7 +514,9 @@ const Source = CONFIG.mode==='supabase' ? Supa : Demo;
    Rückgabe ct/kWh je Viertelstunde. Zum Aktivieren in snapshot() spotC ersetzen. */
 async function fetchSpotPricesDELU(date=new Date()){
   const d=date.toISOString().slice(0,10);
-  const url=`https://api.energy-charts.info/price?bzn=DE-LU&start=${d}T00:00+02:00&end=${d}T23:45+02:00`;
+  // Reines Datum verwenden – ein "+02:00" in der URL würde als Leerzeichen
+  // interpretiert und die Anfrage scheitern lassen.
+  const url=`https://api.energy-charts.info/price?bzn=DE-LU&start=${d}&end=${d}`;
   const j=await (await fetch(url)).json();
   return (j.price||[]).map(p=>+(p/10).toFixed(2));
 }
