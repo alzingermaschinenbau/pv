@@ -200,3 +200,39 @@ order by slot;
 
 grant select on public.pv_spot to anon, authenticated;
 grant select on public.pv_spot_today, public.pv_spot_window to anon, authenticated;
+
+-- ---------- Abschaltungs-Erkennung (Erzeugung = 0 tagsüber) ----------
+-- Erkennt je Anlage zusammenhängende Phasen, in denen tagsüber (10:00–17:00
+-- Europe/Berlin) die Erzeugung auf 0 lag (p_kw <= 1 kW). Das ist das direkte
+-- Signal für eine Abschaltung – im Kernzeitfenster sollte immer Leistung da sein.
+-- "Gaps & Islands": fortlaufende Null-Phasen werden über die Differenz zweier
+-- Zeilennummern zu Ereignissen gruppiert. Nur Phasen ab 10 Min Dauer zählen
+-- (filtert kurze Messaussetzer/Wolken-Flacker heraus).
+create or replace view public.pv_zero_events as
+with f as (
+  select plant,
+         (ts at time zone 'Europe/Berlin')::date as tag,
+         (ts at time zone 'Europe/Berlin')        as lts,
+         (coalesce(p_kw,0) <= 1)                   as null_kw
+  from public.pv_samples
+  where p_kw is not null
+    and extract(hour from (ts at time zone 'Europe/Berlin')) between 10 and 16  -- 10:00–16:59
+),
+m as (
+  select *,
+    row_number() over (partition by plant, tag order by lts)
+    - row_number() over (partition by plant, tag, null_kw order by lts) as grp
+  from f
+)
+select plant,
+       tag,
+       min(lts)                                                     as von,
+       max(lts)                                                     as bis,
+       round(extract(epoch from (max(lts) - min(lts))) / 60.0)::int as dauer_min
+from m
+where null_kw
+group by plant, tag, grp
+having (max(lts) - min(lts)) >= interval '10 minutes'
+order by von;
+
+grant select on public.pv_zero_events to anon, authenticated;

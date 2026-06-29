@@ -278,7 +278,7 @@
         <div class="tile"><div class="tk">Abschaltungen</div><div class="tv" id="ab-count">0</div></div>
         <div class="tile"><div class="tk">Gesamtdauer</div><div class="tv" id="ab-hours">0 <small>Std.</small></div></div>
         <div class="tile"><div class="tk">davon Negativpreis</div><div class="tv neg" id="ab-market">0</div></div>
-        <div class="tile"><div class="tk">davon Netz / Redispatch</div><div class="tv" id="ab-grid" style="color:#7a5512">0</div></div>
+        <div class="tile"><div class="tk">davon Anlage 0 kW</div><div class="tv" id="ab-grid" style="color:#7a5512">0</div></div>
       </div>
       <div class="chart-box" style="margin-top:14px"><canvas id="chartCurtail"></canvas></div>
     </div>
@@ -288,7 +288,7 @@
         <thead><tr><th>Datum</th><th>Zeit</th><th>Dauer</th><th>Grund</th><th>kWh</th></tr></thead>
         <tbody id="ab-rows"></tbody>
       </table>
-      <p class="finehint">Negativpreis = marktbedingte Abregelung durch den Direktvermarkter (ohne Entschädigung). Netz = Redispatch 2.0 (mit Entschädigungsanspruch).</p>
+      <p class="finehint">Anlage 0 kW = Erzeugung lag tagsüber (10–17 Uhr) auf null – die Anlage wurde abgeschaltet. Negativpreis = marktbedingte Abregelung durch den Direktvermarkter (ohne Entschädigung).</p>
     </div>
   </div>
 
@@ -305,7 +305,7 @@
     <div class="chart-box"><canvas id="cEnergy"></canvas></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v14</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v15</span></p>
 
 </main>
 
@@ -371,14 +371,14 @@ function spotCurve(){const p=[];for(let i=0;i<N;i++){const h=i*STEP/60;let c=9+6
   if(h>=10.5&&h<=15)c=2.5-7.5*Math.exp(-Math.pow((h-12.9)/1.5,2));c+=(rnd()-0.5)*1.1;p.push(+c.toFixed(2));}return p;}
 const spotC=spotCurve();
 
-// Abschaltungen 30 Tage: market = Negativpreis, grid = Redispatch
+// Abschaltungen 30 Tage: market = Negativpreis, aus = Anlage 0 kW tagsüber
 function curtail30(){const t=new Date();const s=[
   {d:1,from:'12:15',dur:2.5,grund:'market',kwh:1180},{d:3,from:'11:45',dur:3.0,grund:'market',kwh:1520},
-  {d:4,from:'14:30',dur:1.25,grund:'grid',kwh:610},{d:9,from:'12:00',dur:2.0,grund:'market',kwh:980},
-  {d:12,from:'13:15',dur:1.75,grund:'market',kwh:860},{d:15,from:'10:30',dur:0.75,grund:'grid',kwh:300},
+  {d:4,from:'14:30',dur:1.25,grund:'aus',plant:'Volleinspeiser',kwh:null},{d:9,from:'12:00',dur:2.0,grund:'market',kwh:980},
+  {d:12,from:'13:15',dur:1.75,grund:'market',kwh:860},{d:15,from:'10:30',dur:0.75,grund:'aus',plant:'Eigenverbrauch',kwh:null},
   {d:18,from:'12:30',dur:2.25,grund:'market',kwh:1090},{d:23,from:'11:30',dur:3.5,grund:'market',kwh:1760},
-  {d:26,from:'15:00',dur:1.0,grund:'grid',kwh:420}];
-  return s.map(e=>{const date=new Date(t);date.setDate(t.getDate()-(29-e.d));return {date,from:e.from,dur:e.dur,grund:e.grund,kwh:e.kwh};});}
+  {d:26,from:'15:00',dur:1.0,grund:'aus',plant:'Volleinspeiser',kwh:null}];
+  return s.map(e=>{const date=new Date(t);date.setDate(t.getDate()-(29-e.d));return {date,from:e.from,dur:e.dur,grund:e.grund,plant:e.plant,kwh:e.kwh};});}
 
 /* ============================================================
    DATENSCHICHT
@@ -472,9 +472,9 @@ const Supa = {
     const eigenFeedKwh = Math.max(0, eigenDay - selfKwh);
 
     // 3) Tages- und Monatsenergie (30-Tage / 12-Monate / Monat / Jahr) + Werksverbrauch
-    let daily, monthly, loadD, loadM, histD, histM;
+    let daily, monthly, loadD, loadM, histD, histM, zeroEv;
     if(_slowCache.daily && (Date.now() - _slowCache.dmTs) < SUPA_DM_TTL){
-      daily = _slowCache.daily; monthly = _slowCache.monthly; loadD = _slowCache.loadD; loadM = _slowCache.loadM; histD = _slowCache.histD; histM = _slowCache.histM;
+      daily = _slowCache.daily; monthly = _slowCache.monthly; loadD = _slowCache.loadD; loadM = _slowCache.loadM; histD = _slowCache.histD; histM = _slowCache.histM; zeroEv = _slowCache.zeroEv;
     } else {
       daily   = await this._q('pv_daily?select=plant,tag,gen_kwh&order=tag.asc').catch(() => []);
       monthly = await this._q('pv_monthly?select=plant,monat,gen_kwh&order=monat.asc').catch(() => []);
@@ -482,7 +482,8 @@ const Supa = {
       loadM   = await this._q('pv_load_monthly?select=monat,load_kwh&order=monat.asc').catch(() => []);
       histD   = await this._q('pv_hist_daily?select=plant,tag,gen_kwh&order=tag.asc').catch(() => []);    // importierte Historie
       histM   = await this._q('pv_hist_monthly?select=plant,monat,gen_kwh&order=monat.asc').catch(() => []);
-      _slowCache.daily = daily; _slowCache.monthly = monthly; _slowCache.loadD = loadD; _slowCache.loadM = loadM; _slowCache.histD = histD; _slowCache.histM = histM; _slowCache.dmTs = Date.now();
+      zeroEv  = await this._q('pv_zero_events?select=plant,von,bis,dauer_min&order=von.asc').catch(() => []);  // echte Abschaltungen (0 kW tagsüber)
+      _slowCache.daily = daily; _slowCache.monthly = monthly; _slowCache.loadD = loadD; _slowCache.loadM = loadM; _slowCache.histD = histD; _slowCache.histM = histM; _slowCache.zeroEv = zeroEv; _slowCache.dmTs = Date.now();
     }
 
     // Tageskarte: erst Historie, dann Live (Live hat Vorrang bei gleichem Datum)
@@ -562,6 +563,16 @@ const Supa = {
 
     const labels = Array.from({ length: N }, (_, k) => { const mm = k * STEP; return String(Math.floor(mm/60)).padStart(2,'0') + ':' + String(mm%60).padStart(2,'0'); });
 
+    // Echte Abschaltungen aus der DB (Erzeugung 0 kW tagsüber) – je Anlage
+    const PLANT_NAME = { voll: 'Volleinspeiser', eigen: 'Eigenverbrauch' };
+    const zeroEvents = (zeroEv || []).map(r => {
+      const t = /T(\d\d):(\d\d)/.exec(r.von);
+      return { date: new Date((r.von || '').slice(0,10) + 'T12:00:00'),
+               from: t ? t[1] + ':' + t[2] : '--:--',
+               dur: (r.dauer_min || 0) / 60, grund: 'aus',
+               plant: PLANT_NAME[r.plant] || r.plant, kwh: null };
+    });
+
     return {
       now, liveTs,
       voll:  { kw: v.p_kw || 0, day: vDay, month: sumMon('voll'), year: sumYr('voll'), kwp: CONFIG.plants.voll.kwp },
@@ -574,7 +585,7 @@ const Supa = {
       monthly: monthlyArr,
       yearly: yearlyArr,
       spot: { price, feedTot, price48, labels48, feed48, now: price[nowIdx] || 0, avg: spAvg, min: spMin, max: spMax, negHours: negH, negFeedKwh: negFeed, rule: EEG_RULE.voll.name },
-      curtail: deriveCurtail(price, feedTot, labels, nowIdx, now)
+      curtail: zeroEvents.concat(deriveCurtail(price, feedTot, labels, nowIdx, now))
     };
   }
 };
@@ -672,7 +683,7 @@ function buildCharts(s){
   cCurtail=new Chart(document.getElementById('chartCurtail'),{type:'bar',
     data:{labels:days,datasets:[
       {label:'Negativpreis',data:byDay('market'),backgroundColor:RED,borderRadius:3},
-      {label:'Netz/Redispatch',data:byDay('grid'),backgroundColor:GOLD,borderRadius:3}]},
+      {label:'Anlage 0 kW',data:byDay('aus'),backgroundColor:GOLD,borderRadius:3}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.label+': '+nf1.format(c.parsed.y)+' h'}}},
       scales:{x:{stacked:true,grid:{display:false},border:{display:false}},y:{stacked:true,...axM('Std.')}}}});
 }
@@ -766,16 +777,19 @@ function paint(s,first){
 
   // Abschaltungen
   if(s.curtail){const ev=s.curtail, hrs=ev.reduce((a,e)=>a+e.dur,0);
-    const mkt=ev.filter(e=>e.grund==='market'), grd=ev.filter(e=>e.grund==='grid');
+    const mkt=ev.filter(e=>e.grund==='market'), aus=ev.filter(e=>e.grund==='aus');
     document.getElementById('ab-count').textContent=ev.length;
     document.getElementById('ab-hours').innerHTML=nf1.format(hrs)+' <small>Std.</small>';
     document.getElementById('ab-market').textContent=mkt.length+' · '+nf1.format(mkt.reduce((a,e)=>a+e.dur,0))+' h';
-    document.getElementById('ab-grid').textContent=grd.length+' · '+nf1.format(grd.reduce((a,e)=>a+e.dur,0))+' h';
+    document.getElementById('ab-grid').textContent=aus.length+' · '+nf1.format(aus.reduce((a,e)=>a+e.dur,0))+' h';
     document.getElementById('ab-rows').innerHTML=ev.slice().reverse().slice(0,8).map(e=>{
       const [hh,mm]=e.from.split(':').map(Number);const tm=hh*60+mm+e.dur*60;
       const end=String(Math.floor(tm/60)%24).padStart(2,'0')+':'+String(Math.round(tm%60)).padStart(2,'0');
-      const g=e.grund==='market'?'<span class="g market">Negativpreis</span>':'<span class="g grid">Netz</span>';
-      return `<tr><td>${e.date.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}</td><td>${e.from}–${end}</td><td>${nf1.format(e.dur)} h</td><td>${g}</td><td>${nf0.format(e.kwh)}</td></tr>`;
+      const g=e.grund==='market'?'<span class="g market">Negativpreis</span>'
+            :e.grund==='aus'?'<span class="g">Anlage 0 kW · '+(e.plant||'')+'</span>'
+            :'<span class="g grid">Netz</span>';
+      const kwh=(e.kwh==null)?'–':nf0.format(e.kwh);
+      return `<tr><td>${e.date.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}</td><td>${e.from}–${end}</td><td>${nf1.format(e.dur)} h</td><td>${g}</td><td>${kwh}</td></tr>`;
     }).join('');}
 
   if(CONFIG.mode==='supabase'){document.getElementById('srcbadge').textContent='Supabase · live';document.getElementById('livelabel').textContent='Live';}
