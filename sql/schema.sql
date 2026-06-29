@@ -137,7 +137,7 @@ with s as (
   from public.pv_samples where plant = 'eigen' and load_kw is not null
 )
 select (ts at time zone 'Europe/Berlin')::date as tag,
-       sum(load_kw * extract(epoch from (least(ts_next, ts + interval '5 minutes') - ts)) / 3600.0) as load_kwh
+       sum(greatest(load_kw,0) * extract(epoch from (least(ts_next, ts + interval '5 minutes') - ts)) / 3600.0) as load_kwh
 from s where ts_next is not null
 group by tag order by tag;
 
@@ -147,7 +147,7 @@ with s as (
   from public.pv_samples where plant = 'eigen' and load_kw is not null
 )
 select to_char(ts at time zone 'Europe/Berlin', 'YYYY-MM') as monat,
-       sum(load_kw * extract(epoch from (least(ts_next, ts + interval '5 minutes') - ts)) / 3600.0) as load_kwh
+       sum(greatest(load_kw,0) * extract(epoch from (least(ts_next, ts + interval '5 minutes') - ts)) / 3600.0) as load_kwh
 from s where ts_next is not null
 group by monat order by monat;
 

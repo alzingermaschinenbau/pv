@@ -299,7 +299,7 @@
     <div class="chart-box"><canvas id="chart12"></canvas></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v10</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v11</span></p>
 
 </main>
 
@@ -456,7 +456,7 @@ const Supa = {
     const Hh = STEP / 60;
     let selfKwh = 0, feedKwh = 0, gridKwh = 0, loadDay = 0, eigenDay = 0, vollDay = 0;
     for(let k = 0; k <= nowIdx; k++){
-      vollDay += vollC[k] * Hh; eigenDay += eigenC[k] * Hh; loadDay += loadC[k] * Hh;
+      vollDay += vollC[k] * Hh; eigenDay += eigenC[k] * Hh; loadDay += Math.max(0, loadC[k]) * Hh;
       feedKwh += feedC[k] * Hh; gridKwh += gridC[k] * Hh;
       selfKwh += Math.max(0, Math.min(eigenC[k], loadC[k])) * Hh;
     }
@@ -477,14 +477,14 @@ const Supa = {
 
     // Tageskarte: erst Historie, dann Live (Live hat Vorrang bei gleichem Datum)
     const dmap = {};
-    (histD || []).forEach(r => { const o = dmap[r.tag] = dmap[r.tag] || { date: new Date(r.tag + 'T12:00:00'), voll: 0, eigen: 0 }; o[r.plant] = Math.round(r.gen_kwh || 0); });
-    daily.forEach(r => { const o = dmap[r.tag] = dmap[r.tag] || { date: new Date(r.tag + 'T12:00:00'), voll: 0, eigen: 0 }; o[r.plant] = Math.round(r.gen_kwh || 0); });
+    (histD || []).forEach(r => { const o = dmap[r.tag] = dmap[r.tag] || { date: new Date(r.tag + 'T12:00:00'), voll: 0, eigen: 0 }; o[r.plant] = Math.max(o[r.plant] || 0, Math.round(r.gen_kwh || 0)); });
+    daily.forEach(r => { const o = dmap[r.tag] = dmap[r.tag] || { date: new Date(r.tag + 'T12:00:00'), voll: 0, eigen: 0 }; o[r.plant] = Math.max(o[r.plant] || 0, Math.round(r.gen_kwh || 0)); });
     const dailyArr = Object.keys(dmap).sort().slice(-30).map(k => dmap[k]);
 
     const MON = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
     const mmap = {};
-    (histM || []).forEach(r => { const o = mmap[r.monat] = mmap[r.monat] || { label: MON[(+r.monat.slice(5,7)) - 1] || r.monat, voll: 0, eigen: 0 }; o[r.plant] = Math.round(r.gen_kwh || 0); });
-    monthly.forEach(r => { const o = mmap[r.monat] = mmap[r.monat] || { label: MON[(+r.monat.slice(5,7)) - 1] || r.monat, voll: 0, eigen: 0 }; o[r.plant] = Math.round(r.gen_kwh || 0); });
+    (histM || []).forEach(r => { const o = mmap[r.monat] = mmap[r.monat] || { label: MON[(+r.monat.slice(5,7)) - 1] || r.monat, voll: 0, eigen: 0 }; o[r.plant] = Math.max(o[r.plant] || 0, Math.round(r.gen_kwh || 0)); });
+    monthly.forEach(r => { const o = mmap[r.monat] = mmap[r.monat] || { label: MON[(+r.monat.slice(5,7)) - 1] || r.monat, voll: 0, eigen: 0 }; o[r.plant] = Math.max(o[r.plant] || 0, Math.round(r.gen_kwh || 0)); });
     const monthlyArr = Object.keys(mmap).sort().slice(-12).map(k => mmap[k]);
 
     const pad = n => String(n).padStart(2,'0');
@@ -492,12 +492,14 @@ const Supa = {
     const curMon = todayKey.slice(0,7), curYr = String(now.getFullYear());
     // Monatswerte je Anlage zusammenführen (Live hat Vorrang vor Historie)
     const monMap = {};
-    (histM || []).forEach(r => { monMap[r.plant + '|' + r.monat] = r.gen_kwh || 0; });
-    monthly.forEach(r => { monMap[r.plant + '|' + r.monat] = r.gen_kwh || 0; });
+    (histM || []).forEach(r => { const k = r.plant + '|' + r.monat; monMap[k] = Math.max(monMap[k] || 0, r.gen_kwh || 0); });
+    monthly.forEach(r => { const k = r.plant + '|' + r.monat; monMap[k] = Math.max(monMap[k] || 0, r.gen_kwh || 0); });
     const sumMon = p => monMap[p + '|' + curMon] || 0;
     const sumYr  = p => Object.keys(monMap).filter(k => k.startsWith(p + '|' + curYr)).reduce((a,k) => a + monMap[k], 0);
-    const dayDB  = p => { const r = daily.find(x => x.plant === p && x.tag === todayKey); if(r) return r.gen_kwh;
-                          const h = (histD || []).find(x => x.plant === p && x.tag === todayKey); return h ? h.gen_kwh : null; };
+    const dayDB  = p => { const r = daily.find(x => x.plant === p && x.tag === todayKey);
+                          const h = (histD || []).find(x => x.plant === p && x.tag === todayKey);
+                          if(r == null && h == null) return null;
+                          return Math.max(r ? r.gen_kwh : 0, h ? h.gen_kwh : 0); };
     const vDay = dayDB('voll')  != null ? dayDB('voll')  : vollDay;
     const eDay = dayDB('eigen') != null ? dayDB('eigen') : eigenDay;
 
