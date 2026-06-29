@@ -292,7 +292,7 @@
     <div class="chart-box"><canvas id="chart12"></canvas></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 5&nbsp;Min · <span id="livelabel">Demo</span> · <span class="num">v1</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 30&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v2</span></p>
 
 </main>
 
@@ -692,7 +692,7 @@ async function start(){
   let s;try{s=await Source.snapshot();}catch(e){document.getElementById('livelabel').textContent='Demo';s=await Demo.snapshot();}
   buildCharts(s);paint(s,true);
   setInterval(tickClock,1000);tickClock();
-  const every=CONFIG.mode==='supabase'?300000:3000;
+  const every=CONFIG.mode==='supabase'?30000:3000;
   setInterval(async()=>{let u;try{u=await Source.snapshot();}catch(_){u=await Demo.snapshot();}paint(u,false);
     if(CONFIG.mode==='supabase'){cDay.data.datasets[0].data=u.curve.voll;cDay.data.datasets[1].data=u.curve.eigen;cDay.data.datasets[2].data=u.curve.load;cDay.update('none');}},every);
 }
