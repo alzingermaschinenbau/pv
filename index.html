@@ -367,7 +367,7 @@
     <div class="chart-box"><canvas id="cEnergy"></canvas></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v22</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v23</span></p>
 
 </main>
 
@@ -794,6 +794,9 @@ function renderEnergy(range){
   energyRange = range;
   const dr = document.getElementById('dateRange'); if(dr) dr.style.display = 'flex';  // Kalender immer verfügbar
   const all = lastSnap.dailyAll || lastSnap.daily || [];
+  // Datumsfelder auf den verfügbaren Zeitraum begrenzen (verhindert leere Auswahl)
+  const fEl=document.getElementById('dFrom'), tEl=document.getElementById('dTo');
+  if(all.length && fEl){ const mn=dKey(all[0].date), mx=dKey(all[all.length-1].date); fEl.min=mn; tEl.min=mn; fEl.max=mx; tEl.max=mx; }
   // 1) Kalender-Zeitraum anwenden (falls gesetzt)
   let rows = all;
   if(energyFrom || energyTo) rows = all.filter(d=>{ const k=dKey(d.date); return (!energyFrom||k>=energyFrom) && (!energyTo||k<=energyTo); });
@@ -818,7 +821,8 @@ function renderEnergy(range){
   cEnergy.$unit = unit;
   cEnergy.options.scales.y.title.text = unit;
   cEnergy.update();
-  const he = document.getElementById('energyHint'); if(he) he.textContent = `${unit} / ${gl}${(energyFrom||energyTo)?' · '+arr.length:''}`;
+  const he = document.getElementById('energyHint');
+  if(he) he.textContent = arr.length ? `${unit} / ${gl}${(energyFrom||energyTo)?' · '+arr.length:''}` : 'Keine Daten im Zeitraum';
   document.querySelectorAll('#energyToggle button').forEach(b=>b.classList.toggle('active', b.dataset.range===range));
 }
 
