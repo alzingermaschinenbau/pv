@@ -111,9 +111,11 @@
   .pcard .pfoot{display:flex;justify-content:space-between;margin-top:9px;font-size:.76rem;color:var(--muted);font-weight:600;font-variant-numeric:tabular-nums}
 
   /* stat tiles */
-  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;background:var(--line);
+  .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line);
     border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden}
-  .tile{background:var(--card);padding:13px 14px}
+  @media(min-width:900px){.tiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  .tiles .tile:last-child:nth-child(odd){grid-column:1/-1}
+  .tile{background:var(--card);padding:13px 14px;min-width:0}
   .tile .tk{color:var(--muted);font-weight:600;font-size:.78rem;display:flex;align-items:center;gap:7px}
   .tile .tv{font-weight:800;font-size:1.2rem;margin-top:4px;font-variant-numeric:tabular-nums}
   .tile .tv small{font-size:.62rem;color:var(--muted);font-weight:600;margin-left:3px}
@@ -139,7 +141,17 @@
   .tbl td:first-child{text-align:left;font-weight:700}
   .tbl tr:last-child td{border-bottom:none}
   .tbl tr.sum td{background:#FAFAFA;font-weight:800}
-  .pname{display:flex;align-items:center;gap:9px}
+  .tbl td small,.tbl th small{display:block;font-size:.62rem}
+  /* Auf schmalen Geräten Tabellen kompakter, damit alle Spalten passen */
+  @media(max-width:560px){
+    .tbl{font-size:.76rem;table-layout:fixed}
+    .tbl th{padding:0 4px 8px;letter-spacing:0}
+    .tbl td{padding:9px 4px}
+    .tbl td:first-child,.tbl th:first-child{padding-left:2px;width:40%}
+    .pname small{font-size:.62rem}
+  }
+  .pname{display:flex;align-items:center;gap:8px;min-width:0}
+  .pname span{min-width:0;line-height:1.15}
   .pname b{width:9px;height:22px;border-radius:3px;display:inline-block}
   .pname.voll b{background:var(--brand)} .pname.eigen b{background:var(--gold)}
   .pname small{display:block;color:var(--muted-2);font-size:.72rem;font-weight:600}
@@ -257,6 +269,23 @@
     </div>
   </div>
 
+  <!-- Einspeisevergütung -->
+  <div class="erow"><span class="eyebrow">Einspeisevergütung</span><span class="chint">€ aus der Einspeisung</span></div>
+  <div class="card">
+    <table class="tbl">
+      <thead><tr><th>Anlage</th><th>Tag</th><th>Monat</th><th>Jahr</th></tr></thead>
+      <tbody>
+        <tr><td><div class="pname voll"><b></b><span>Volleinspeiser<small>9,289 ct/kWh</small></span></div></td>
+          <td id="v-voll-day">–</td><td id="v-voll-mon">–</td><td id="v-voll-yr">–</td></tr>
+        <tr><td><div class="pname eigen"><b></b><span>Eigenverbrauch<small>6,387 ct/kWh · nur Einspeisung</small></span></div></td>
+          <td id="v-eigen-day">–</td><td id="v-eigen-mon">–</td><td id="v-eigen-yr">–</td></tr>
+        <tr class="sum"><td>Summe</td>
+          <td id="v-sum-day">–</td><td id="v-sum-mon">–</td><td id="v-sum-yr">–</td></tr>
+      </tbody>
+    </table>
+    <p class="finehint">Volleinspeiser: gesamte Erzeugung × 9,289 ct. Eigenverbrauch: nur die eingespeiste Energie (Erzeugung − Werksverbrauch) × 6,387 ct. Monat/Jahr für Eigenverbrauch sind Näherungswerte aus den Tagesdaten.</p>
+  </div>
+
   <!-- Börsenstrompreis -->
   <div class="erow" id="sec-boerse"><span class="eyebrow">Börsenstrompreis</span><span class="chint">EPEX DE-LU · heute &amp; morgen · 15-Min</span></div>
   <div class="card">
@@ -340,7 +369,7 @@
     <div class="chart-box"><canvas id="cEnergy"></canvas></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v20</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v21</span></p>
 
 </main>
 
@@ -365,7 +394,9 @@ const CONFIG = {
   plants: {
     voll:  { name:'Volleinspeiser', kwp:615, stationCode:'NE=XXXXXX' },
     eigen: { name:'Eigenverbrauch', kwp:335, stationCode:'NE=YYYYYY' },
-  }
+  },
+  // Einspeisevergütung €/kWh – Volleinspeiser: gesamte Erzeugung, Eigenverbrauch: nur Einspeisung
+  feedTariff: { voll: 0.09289, eigen: 0.06387 }
 };
 
 /* EEG-Negativpreisregel je Anlage – Schwelle hängt vom Inbetriebnahmedatum ab */
@@ -849,6 +880,21 @@ function paint(s,first){
   set('t-eigen-now',fmtKW(s.eigen.kw));set('t-eigen-day',fmtKWh(s.eigen.day));set('t-eigen-mon',fmtKWh(s.eigen.month));set('t-eigen-yr',fmtKWh(s.eigen.year));
   set('t-sum-now',fmtKW(total));set('t-sum-day',fmtKWh(s.voll.day+s.eigen.day));set('t-sum-mon',fmtKWh(s.voll.month+s.eigen.month));set('t-sum-yr',fmtKWh(s.voll.year+s.eigen.year));
   set('t-load-now',fmtKW(s.eigen.load));set('t-load-day',fmtKWh(s.eigen.loadDay||0));set('t-load-mon',fmtKWh(s.eigen.loadMonth||0));set('t-load-yr',fmtKWh(s.eigen.loadYear||0));
+
+  // Einspeisevergütung (€)
+  if(s.voll && s.eigen){
+    const tV=CONFIG.feedTariff.voll, tE=CONFIG.feedTariff.eigen;
+    const eur=(v,d)=>(v||0).toLocaleString('de-DE',{minimumFractionDigits:d,maximumFractionDigits:d})+' €';
+    const vD=(s.voll.day||0)*tV, vM=(s.voll.month||0)*tV, vY=(s.voll.year||0)*tV;
+    const eFeedD=Math.max(0,s.eigen.feedKwh||0);
+    const eFeedM=Math.max(0,(s.eigen.month||0)-(s.eigen.loadMonth||0));
+    const eFeedY=Math.max(0,(s.eigen.year||0)-(s.eigen.loadYear||0));
+    const eD=eFeedD*tE, eM=eFeedM*tE, eY=eFeedY*tE;
+    const setE=(id,v,d)=>{const el=document.getElementById(id); if(el)el.textContent=eur(v,d);};
+    setE('v-voll-day',vD,2); setE('v-voll-mon',vM,0); setE('v-voll-yr',vY,0);
+    setE('v-eigen-day',eD,2); setE('v-eigen-mon',eM,0); setE('v-eigen-yr',eY,0);
+    setE('v-sum-day',vD+eD,2); setE('v-sum-mon',vM+eM,0); setE('v-sum-yr',vY+eY,0);
+  }
 
   // Börsenstrompreis
   if(s.spot){const sp=s.spot, neg=sp.now<0;
