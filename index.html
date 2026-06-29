@@ -220,7 +220,7 @@
   <div class="erow"><span class="eyebrow">Momentan</span><span class="ts num" id="clock">--:--:--</span></div>
   <div class="kpirow">
     <div class="kcard" style="--ac:var(--brand)"><div class="kl">Gesamtleistung</div><hr><div class="kn" id="ro-total" style="color:var(--brand)">0</div><div class="ku"><span id="ro-total-sub">0&nbsp;%</span> der Spitze · 950 kWp</div></div>
-    <div class="kcard" style="--ac:var(--blue)"><div class="kl">Werksverbrauch momentan</div><hr><div class="kn" id="ro-load">0</div><div class="ku">kW · Eigenverbrauchsanlage</div></div>
+    <div class="kcard" style="--ac:var(--blue)"><div class="kl">Stromverbrauch momentan</div><hr><div class="kn" id="ro-load">0</div><div class="ku">kW · Eigenverbrauchsanlage</div></div>
     <div class="kcard" style="--ac:var(--blue)"><div class="kl">Tagesverbrauch Werk</div><hr><div class="kn" id="ro-loadday" style="color:var(--blue)">0</div><div class="ku">kWh heute</div></div>
     <div class="kcard" style="--ac:var(--purple)"><div class="kl">Einspeisung</div><hr><div class="kn" id="ro-feed" style="color:var(--purple)">0</div><div class="ku">kW netto ins Netz</div></div>
     <div class="kcard" style="--ac:var(--gold)"><div class="kl">Netzbezug</div><hr><div class="kn" id="ro-grid" style="color:var(--gold)">0</div><div class="ku">kW aus dem Netz</div></div>
@@ -267,7 +267,7 @@
         <div class="tile"><div class="tk"><span class="swatch" style="background:var(--green)"></span>Eigenverbrauch</div><div class="tv" id="b-eigen">0<small>kWh</small></div></div>
         <div class="tile"><div class="tk"><span class="swatch" style="background:var(--brand)"></span>Einspeisung</div><div class="tv" id="b-feed">0<small>kWh</small></div></div>
         <div class="tile"><div class="tk"><span class="swatch" style="background:var(--gold)"></span>Netzbezug</div><div class="tv" id="b-bezug">0<small>kWh</small></div></div>
-        <div class="tile"><div class="tk"><span class="swatch" style="background:var(--blue)"></span>Werksverbrauch heute</div><div class="tv" id="b-load">0<small>kWh</small></div></div>
+        <div class="tile"><div class="tk"><span class="swatch" style="background:var(--blue)"></span>Stromverbrauch heute</div><div class="tv" id="b-load">0<small>kWh</small></div></div>
         <div class="tile"><div class="tk">Autarkiegrad</div><div class="tv" id="autarkie">0<small>%</small></div></div>
       </div>
     </div>
@@ -282,7 +282,7 @@
             <td><span id="t-eigen-now">0</span> kW</td><td id="t-eigen-day">0</td><td id="t-eigen-mon">0</td><td id="t-eigen-yr">0</td></tr>
           <tr class="sum"><td>Gesamt</td>
             <td><span id="t-sum-now">0</span> kW</td><td id="t-sum-day">0</td><td id="t-sum-mon">0</td><td id="t-sum-yr">0</td></tr>
-          <tr><td><div class="pname"><b style="background:var(--blue)"></b><span>Werksverbrauch<small>Eigenverbrauchsanlage</small></span></div></td>
+          <tr><td><div class="pname"><b style="background:var(--blue)"></b><span>Stromverbrauch<small>Eigenverbrauchsanlage</small></span></div></td>
             <td><span id="t-load-now">0</span> kW</td><td id="t-load-day">0</td><td id="t-load-mon">0</td><td id="t-load-yr">0</td></tr>
         </tbody>
       </table>
@@ -304,7 +304,7 @@
           <td id="v-sum-day">–</td><td id="v-sum-mon">–</td><td id="v-sum-yr">–</td></tr>
       </tbody>
     </table>
-    <p class="finehint">Volleinspeiser: gesamte Erzeugung × 9,289 ct. Eigenverbrauch: nur die eingespeiste Energie (Erzeugung − Werksverbrauch) × 6,387 ct. Monat/Jahr für Eigenverbrauch sind Näherungswerte aus den Tagesdaten.</p>
+    <p class="finehint">Volleinspeiser: gesamte Erzeugung × 9,289 ct. Eigenverbrauch: nur die eingespeiste Energie (Erzeugung − Stromverbrauch) × 6,387 ct. Monat/Jahr für Eigenverbrauch sind Näherungswerte aus den Tagesdaten.</p>
   </div>
 
   <!-- Börsenstrompreis -->
@@ -390,8 +390,8 @@
     <div class="chart-box"><canvas id="cEnergy"></canvas></div>
   </div>
 
-  <!-- Werksverbrauch (Tage/Wochen/Monate/Jahre) -->
-  <div class="erow"><span class="eyebrow">Werksverbrauch</span>
+  <!-- Stromverbrauch (Tage/Wochen/Monate/Jahre) -->
+  <div class="erow"><span class="eyebrow">Stromverbrauch</span>
     <div class="seg" id="loadToggle">
       <button data-range="days" class="active">Tage</button>
       <button data-range="weeks">Wochen</button>
@@ -400,7 +400,7 @@
     </div>
   </div>
   <div class="card">
-    <div class="legend"><span><i style="background:var(--blue)"></i>Werksverbrauch</span><span class="chint" id="loadHint" style="margin-left:auto">kWh / Tag</span></div>
+    <div class="legend"><span><i style="background:var(--blue)"></i>Stromverbrauch</span><span class="chint" id="loadHint" style="margin-left:auto">kWh / Tag</span></div>
     <div class="chart-box"><canvas id="cLoad"></canvas></div>
   </div>
 
@@ -421,7 +421,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v28</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v29</span></p>
 
 </main>
 
@@ -595,7 +595,7 @@ const Supa = {
     // NICHT die Gesamt-Einspeisung am NAP (die enthält den Volleinspeiser).
     const eigenFeedKwh = Math.max(0, eigenDay - selfKwh);
 
-    // 3) Tages- und Monatsenergie (30-Tage / 12-Monate / Monat / Jahr) + Werksverbrauch
+    // 3) Tages- und Monatsenergie (30-Tage / 12-Monate / Monat / Jahr) + Stromverbrauch
     let daily, monthly, loadD, loadM, histD, histM, zeroEv, histCur, negDaily;
     if(_slowCache.daily && (Date.now() - _slowCache.dmTs) < SUPA_DM_TTL){
       daily = _slowCache.daily; monthly = _slowCache.monthly; loadD = _slowCache.loadD; loadM = _slowCache.loadM; histD = _slowCache.histD; histM = _slowCache.histM; zeroEv = _slowCache.zeroEv; histCur = _slowCache.histCur; negDaily = _slowCache.negDaily;
@@ -647,7 +647,7 @@ const Supa = {
     const vDay = dayDB('voll')  != null ? dayDB('voll')  : vollDay;
     const eDay = dayDB('eigen') != null ? dayDB('eigen') : eigenDay;
 
-    // Werksverbrauch (kWh): Tag aus DB (sonst Intraday), Monat/Jahr aus Verbrauchs-View
+    // Stromverbrauch (kWh): Tag aus DB (sonst Intraday), Monat/Jahr aus Verbrauchs-View
     const loadDayRow = (loadD || []).find(r => r.tag === todayKey);
     const loadDayE = loadDayRow != null ? loadDayRow.load_kwh : loadDay;
     const loadMon  = (loadM || []).filter(r => r.monat === curMon).reduce((a,b) => a + (b.load_kwh || 0), 0);
@@ -846,11 +846,11 @@ function buildCharts(s){
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.label+': '+nf1.format(c.parsed.y)+' MWh'}}},
       scales:{x:{stacked:true,grid:{display:false},border:{display:false},ticks:{maxTicksLimit:12}},y:{stacked:true,...axM('MWh entgangen')}}}});
 
-  // Werksverbrauch – umschaltbar Tage/Wochen/Monate/Jahre
+  // Stromverbrauch – umschaltbar Tage/Wochen/Monate/Jahre
   cLoad=new Chart(document.getElementById('cLoad'),{type:'bar',
-    data:{labels:[],datasets:[{label:'Werksverbrauch',data:[],backgroundColor:BLUE,borderRadius:3}]},
+    data:{labels:[],datasets:[{label:'Stromverbrauch',data:[],backgroundColor:BLUE,borderRadius:3}]},
     options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>{const u=c.chart.$unit||'kWh';return 'Werksverbrauch: '+(u==='MWh'?nf1.format(c.parsed.y):nf0.format(c.parsed.y))+' '+u;}}}},
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>{const u=c.chart.$unit||'kWh';return 'Stromverbrauch: '+(u==='MWh'?nf1.format(c.parsed.y):nf0.format(c.parsed.y))+' '+u;}}}},
       scales:{x:{grid:{display:false},border:{display:false},ticks:{maxTicksLimit:12}},y:{...axM('kWh')}}}});
   cLoad.$unit='kWh';
 }
@@ -902,7 +902,7 @@ function renderEnergy(range){
   document.querySelectorAll('#energyToggle button').forEach(b=>b.classList.toggle('active', b.dataset.range===range));
 }
 
-/* Werksverbrauch-Chart je Filter (Tage/Wochen/Monate/Jahre) */
+/* Stromverbrauch-Chart je Filter (Tage/Wochen/Monate/Jahre) */
 function renderLoad(range){
   if(!cLoad || !lastSnap) return;
   loadRange = range;
