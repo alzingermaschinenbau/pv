@@ -167,6 +167,22 @@
   .tab.active{color:var(--brand)}
 
   @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+  /* PDF/Druck: nur den Bericht zeigen */
+  .rep-h1{font-size:1.3rem;font-weight:800;margin-bottom:2px}
+  .rep-sub{color:var(--muted);font-size:.82rem;margin-bottom:14px}
+  .rep-sec{font-weight:800;font-size:1rem;margin:18px 0 8px}
+  .rep-kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:6px}
+  .rep-kpi{border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .rep-kpi .k{color:var(--muted);font-size:.74rem;font-weight:600}
+  .rep-kpi .v{font-weight:800;font-size:1.15rem;margin-top:3px}
+  @media print{
+    @page{margin:14mm}
+    body{background:#fff!important}
+    body *{visibility:hidden!important}
+    #reportArea,#reportArea *{visibility:visible!important}
+    #reportArea{position:absolute;left:0;top:0;width:100%;margin:0!important}
+    .appbar,.tabbar{display:none!important}
+  }
 </style>
 </head>
 <body>
@@ -367,7 +383,24 @@
     <div class="chart-box"><canvas id="cEnergy"></canvas></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v24</span></p>
+  <!-- Auswertung / PDF-Bericht -->
+  <div class="erow" id="sec-bericht"><span class="eyebrow">Auswertung · PDF-Bericht</span></div>
+  <div class="card">
+    <div class="daterange">
+      <span class="drlabel">Von</span><input type="date" id="rFrom" aria-label="von">
+      <span class="drsep">–</span><input type="date" id="rTo" aria-label="bis">
+    </div>
+    <div class="seg" id="reportToggle" style="margin:2px 0 14px">
+      <button data-g="days">Tage</button>
+      <button data-g="weeks">Wochen</button>
+      <button data-g="months" class="active">Monate</button>
+      <button data-g="years">Jahre</button>
+    </div>
+    <button id="reportPdf" type="button" style="font-family:inherit;font-weight:700;font-size:.9rem;color:#fff;background:var(--brand);border:none;border-radius:10px;padding:11px 18px;cursor:pointer;width:100%">📄 Bericht als PDF / Drucken</button>
+    <div id="reportArea" style="margin-top:16px"></div>
+  </div>
+
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v25</span></p>
 
 </main>
 
@@ -940,6 +973,7 @@ function paint(s,first){
     }).join('');}
 
   if(CONFIG.mode==='supabase'){document.getElementById('srcbadge').textContent='Supabase · live';document.getElementById('livelabel').textContent='Live';}
+  if(!_reportInit){ _reportInit=true; try{ renderReport(); }catch(_){} }
 }
 
 function tickClock(){const n=Source.now?Source.now():new Date();document.getElementById('clock').textContent=n.toLocaleTimeString('de-DE',{hour12:false});updateOffline();}
@@ -984,6 +1018,63 @@ function clearChartTips(){
 }
 window.addEventListener('scroll',clearChartTips,{passive:true});
 document.addEventListener('touchend',clearChartTips,{passive:true});
+
+/* ============================================================
+   AUSWERTUNG / PDF-BERICHT
+   ============================================================ */
+let reportGran='months', _reportInit=false;
+function repBucket(dt,g){
+  if(g==='weeks'){ const [wy,wk]=isoWeek(dt); return ['W'+wy+String(wk).padStart(2,'0'),'KW'+wk+'/'+String(wy).slice(2)]; }
+  if(g==='months') return [`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`, MONS[dt.getMonth()]+' '+String(dt.getFullYear()).slice(2)];
+  if(g==='years')  return [String(dt.getFullYear()), String(dt.getFullYear())];
+  return [dKey(dt), dt.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'})];
+}
+function renderReport(){
+  const area=document.getElementById('reportArea'); if(!area||!lastSnap) return;
+  const from=(document.getElementById('rFrom').value)||'2024-01-01';
+  const to=(document.getElementById('rTo').value)||dKey(new Date());
+  const inRange=k=>k>=from&&k<=to;
+  const days=(lastSnap.dailyAll||[]).filter(d=>inRange(dKey(d.date)));
+  const hc=(lastSnap.histCurtail||[]).filter(e=>inRange(dKey(e.date)));
+  const B=new Map();
+  const add=(dt,fn)=>{ const [k,l]=repBucket(dt,reportGran); const o=B.get(k)||{label:l,voll:0,eigen:0,lost:0}; fn(o); B.set(k,o); };
+  days.forEach(d=>add(d.date,o=>{o.voll+=d.voll||0;o.eigen+=d.eigen||0;}));
+  hc.forEach(e=>add(e.date,o=>{o.lost+=e.lost||0;}));
+  const rows=[...B.entries()].sort((a,b)=>a[0]<b[0]?-1:1).map(e=>e[1]);
+  const tot=rows.reduce((a,r)=>({voll:a.voll+r.voll,eigen:a.eigen+r.eigen,lost:a.lost+r.lost}),{voll:0,eigen:0,lost:0});
+  const fmtD=s=>{const p=s.split('-');return p[2]+'.'+p[1]+'.'+p[0];};
+  const gname={days:'Tag',weeks:'Woche',months:'Monat',years:'Jahr'}[reportGran];
+  const lv=hc.filter(e=>e.plantKey==='voll').length, le=hc.filter(e=>e.plantKey==='eigen').length;
+  const negToday=lastSnap.spot?(lastSnap.spot.negHours||0):0;
+  const r0=v=>nf0.format(Math.round(v));
+  let h=`<div class="rep-h1">Energie-Auswertung · Alzinger Maschinenbau</div>
+  <div class="rep-sub">Zeitraum ${fmtD(from)} – ${fmtD(to)} · Einteilung: pro ${gname} · erstellt ${new Date().toLocaleDateString('de-DE')}</div>
+  <div class="rep-kpis">
+    <div class="rep-kpi"><div class="k">Ertrag Volleinspeiser</div><div class="v" style="color:var(--brand)">${r0(tot.voll)} kWh</div></div>
+    <div class="rep-kpi"><div class="k">Ertrag Eigenverbrauch</div><div class="v" style="color:var(--gold)">${r0(tot.eigen)} kWh</div></div>
+    <div class="rep-kpi"><div class="k">Entgangene Erzeugung (Abregelung)</div><div class="v" style="color:var(--brand)">${r0(tot.lost)} kWh</div></div>
+    <div class="rep-kpi"><div class="k">Abschalt-Tage</div><div class="v">${hc.length} <small style="font-weight:600;color:var(--muted)">(Voll ${lv} · Eigen ${le})</small></div></div>
+  </div>
+  <div class="rep-sec">Ertrag & Abregelung pro ${gname}</div>
+  <table class="tbl"><thead><tr><th>${gname}</th><th>Voll kWh</th><th>Eigen kWh</th><th>Summe</th><th>Entgangen</th></tr></thead><tbody>`;
+  rows.forEach(r=>{ h+=`<tr><td>${r.label}</td><td>${r0(r.voll)}</td><td>${r0(r.eigen)}</td><td>${r0(r.voll+r.eigen)}</td><td>${r.lost?r0(r.lost):'–'}</td></tr>`; });
+  h+=`<tr class="sum"><td>Summe</td><td>${r0(tot.voll)}</td><td>${r0(tot.eigen)}</td><td>${r0(tot.voll+tot.eigen)}</td><td>${r0(tot.lost)}</td></tr></tbody></table>
+  <div class="rep-sec">EEG-Regelung & Negativpreis</div>
+  <p class="finehint">Volleinspeiser: ${EEG_RULE.voll.name} (Inbetriebnahme ${EEG_RULE.voll.inbetriebnahme}).<br>
+  Eigenverbrauch: ${EEG_RULE.eigen.name} (Inbetriebnahme ${EEG_RULE.eigen.inbetriebnahme}).<br>
+  Negativer Börsenpreis heute: ${nf1.format(negToday)} Std. · Historische Negativpreis-Stunden über den gesamten Zeitraum werden ab jetzt laufend mitgeschrieben (Rückwirkung auf Wunsch nachladbar).</p>`;
+  area.innerHTML=h;
+}
+(function(){
+  const rf=document.getElementById('rFrom'), rt=document.getElementById('rTo'); if(!rf) return;
+  const pad=n=>String(n).padStart(2,'0'), d=new Date();
+  rf.value='2024-01-01'; rt.value=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  rf.addEventListener('change',renderReport); rt.addEventListener('change',renderReport);
+  document.querySelectorAll('#reportToggle button').forEach(b=>b.addEventListener('click',()=>{
+    reportGran=b.dataset.g; document.querySelectorAll('#reportToggle button').forEach(x=>x.classList.toggle('active',x===b)); renderReport();
+  }));
+  document.getElementById('reportPdf').addEventListener('click',()=>{ renderReport(); setTimeout(()=>window.print(),60); });
+})();
 
 /* ============================================================
    START
