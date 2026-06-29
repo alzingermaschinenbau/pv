@@ -60,16 +60,14 @@
   .erow .link{color:var(--brand);font-weight:700;font-size:.85rem;cursor:pointer}
 
   /* ---------- KPI row (momentan) ---------- */
-  .kpirow{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;
-    padding-bottom:4px;-webkit-overflow-scrolling:touch}
-  .kpirow::-webkit-scrollbar{height:0}
-  .kcard{flex:0 0 auto;min-width:208px;background:var(--card);border-radius:var(--r-md);
-    border-left:6px solid var(--ac,var(--brand));box-shadow:var(--shadow);padding:15px 18px;scroll-snap-align:start}
-  .kcard .kl{color:var(--muted);font-weight:600;font-size:.82rem}
-  .kcard hr{border:none;height:1px;background:var(--line);margin:10px 0}
-  .kcard .kn{font-weight:800;font-size:1.95rem;line-height:1;font-variant-numeric:tabular-nums;color:var(--blue)}
-  .kcard .ku{color:var(--muted);font-size:.78rem;margin-top:5px}
-  @media(min-width:720px){.kpirow{display:grid;grid-template-columns:repeat(4,1fr);overflow:visible}.kcard{min-width:0}}
+  .kpirow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  @media(min-width:640px){.kpirow{grid-template-columns:repeat(3,1fr)}}
+  .kcard{background:var(--card);border-radius:var(--r-md);min-width:0;
+    border-left:5px solid var(--ac,var(--brand));box-shadow:var(--shadow);padding:12px 14px}
+  .kcard .kl{color:var(--muted);font-weight:600;font-size:.76rem;line-height:1.2}
+  .kcard hr{border:none;height:1px;background:var(--line);margin:8px 0}
+  .kcard .kn{font-weight:800;font-size:1.55rem;line-height:1;font-variant-numeric:tabular-nums;color:var(--blue)}
+  .kcard .ku{color:var(--muted);font-size:.72rem;margin-top:4px;line-height:1.25}
 
   /* ---------- Cards / sections ---------- */
   .card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);padding:18px}
@@ -369,7 +367,7 @@
     <div class="chart-box"><canvas id="cEnergy"></canvas></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v21</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v22</span></p>
 
 </main>
 
