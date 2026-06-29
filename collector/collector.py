@@ -96,14 +96,31 @@ METER_SCAN = os.getenv("METER_SCAN", "").strip()
 
 
 # ---------- Modbus-Decoder ----------
+_READ_KW = None   # erkanntes Schlüsselwort für die Slave-/Geräte-ID (pymodbus-Version)
+
+
 def _read_regs(client, slave, address, count):
-    """Liest 'count' Holding-Register. Gibt Liste oder None bei Fehler."""
-    try:
-        rr = client.read_holding_registers(address, count=count, slave=slave)
-    except Exception as e:                       # noqa: BLE001
-        print(f"  ! Modbus-Fehler slave {slave} @ {address}: {e}")
+    """Liest 'count' Holding-Register. Gibt Liste oder None bei Fehler.
+    Robust gegen pymodbus-Versionen: slave= (3.x) / device_id= (neuere) / unit= (2.x)."""
+    global _READ_KW
+    fn = client.read_holding_registers
+    candidates = [_READ_KW] if _READ_KW else ["slave", "device_id", "unit"]
+    rr, last_err = None, None
+    for kw in candidates:
+        try:
+            rr = fn(address, count=count, **{kw: slave})
+            _READ_KW = kw                       # passendes Schlüsselwort merken
+            break
+        except TypeError as e:                  # Schlüsselwort passt nicht -> nächstes probieren
+            last_err = e
+            continue
+        except Exception as e:                  # noqa: BLE001  echter Modbus-/Verbindungsfehler
+            print(f"  ! Modbus-Fehler slave {slave} @ {address}: {e}")
+            return None
+    if rr is None:
+        print(f"  ! Modbus-Fehler slave {slave} @ {address}: {last_err}")
         return None
-    if rr is None or rr.isError():
+    if rr.isError():
         print(f"  ! Modbus-Antwortfehler slave {slave} @ {address}: {rr}")
         return None
     return rr.registers
