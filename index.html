@@ -81,6 +81,11 @@
   .seg{display:inline-flex;background:var(--card-2,#f1f1f2);border:1px solid rgba(24,26,29,.08);border-radius:999px;padding:3px;gap:2px}
   .seg button{border:none;background:none;font-family:inherit;font-size:.78rem;font-weight:700;color:var(--muted-2);padding:5px 13px;border-radius:999px;cursor:pointer;transition:.15s}
   .seg button.active{background:var(--brand);color:#fff;box-shadow:0 1px 3px rgba(203,42,36,.3)}
+  .daterange{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:2px 0 12px}
+  .daterange .drlabel{font-size:.74rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+  .daterange .drsep{color:var(--muted-2)}
+  .daterange input[type=date]{font-family:inherit;font-size:.82rem;font-weight:600;color:var(--ink);border:1px solid rgba(24,26,29,.14);border-radius:9px;padding:5px 9px;background:#fff}
+  .daterange button{font-family:inherit;font-size:.78rem;font-weight:700;color:var(--brand);background:none;border:1px solid rgba(203,42,36,.3);border-radius:999px;padding:5px 12px;cursor:pointer}
   .chart-box{position:relative;height:300px}
   .chart-box.tall{height:330px}
   .chart-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:10px}
@@ -324,10 +329,17 @@
   </div>
   <div class="card">
     <div class="legend"><span><i style="background:var(--brand)"></i>Volleinspeiser</span><span><i style="background:var(--gold)"></i>Eigenverbrauch</span><span class="chint" id="energyHint" style="margin-left:auto">kWh / Tag</span></div>
+    <div class="daterange" id="dateRange">
+      <span class="drlabel">Zeitraum</span>
+      <input type="date" id="dFrom" aria-label="von">
+      <span class="drsep">–</span>
+      <input type="date" id="dTo" aria-label="bis">
+      <button id="dReset" type="button">letzte 30 Tage</button>
+    </div>
     <div class="chart-box"><canvas id="cEnergy"></canvas></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v17</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v18</span></p>
 
 </main>
 
@@ -428,7 +440,7 @@ const Demo={
              quote:pvDay>0?self/pvDay*100:0,autarkie:loadDay>0?self/loadDay*100:0},
       curve:{labels:Array.from({length:N},(_,k)=>{const m=k*STEP;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}),
              voll:vollC,eigen:eigenC,load:loadC,nowIdx:i},
-      daily:daily30(), monthly:monthly12(),
+      daily:daily30(), dailyAll:daily30(), monthly:monthly12(),
       yearly:[{label:'2023',voll:892000,eigen:486000},{label:'2024',voll:586435,eigen:328485},{label:'2025',voll:611000,eigen:341000},{label:'2026',voll:298000,eigen:162000}],
       spot:{price:spotC,feedTot,
             price48:spotC.concat(spotC),
@@ -517,7 +529,9 @@ const Supa = {
     const dmap = {};
     (histD || []).forEach(r => { const o = dmap[r.tag] = dmap[r.tag] || { date: new Date(r.tag + 'T12:00:00'), voll: 0, eigen: 0 }; o[r.plant] = Math.max(o[r.plant] || 0, Math.round(r.gen_kwh || 0)); });
     daily.forEach(r => { const o = dmap[r.tag] = dmap[r.tag] || { date: new Date(r.tag + 'T12:00:00'), voll: 0, eigen: 0 }; o[r.plant] = Math.max(o[r.plant] || 0, Math.round(r.gen_kwh || 0)); });
-    const dailyArr = Object.keys(dmap).sort().slice(-30).map(k => dmap[k]);
+    const dailySorted = Object.keys(dmap).sort();
+    const dailyArr = dailySorted.slice(-30).map(k => dmap[k]);
+    const dailyAll = dailySorted.map(k => dmap[k]);
 
     const MON = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
     const mmap = {};
@@ -615,6 +629,7 @@ const Supa = {
                quote: eigenDay > 0 ? selfKwh / eigenDay * 100 : 0, autarkie: loadDay > 0 ? Math.min(100, selfKwh / loadDay * 100) : 0 },
       curve: { labels, voll: vollC, eigen: eigenC, load: loadC, nowIdx },
       daily: dailyArr,
+      dailyAll,
       monthly: monthlyArr,
       yearly: yearlyArr,
       spot: { price, feedTot, price48, labels48, feed48, now: price[nowIdx] || 0, avg: spAvg, min: spMin, max: spMax, negHours: negH, negFeedKwh: negFeed, rule: EEG_RULE.voll.name },
@@ -664,7 +679,7 @@ const GRID='rgba(24,26,29,.06)';
 const axM=u=>({grid:{color:GRID,drawBorder:false},border:{display:false},ticks:{callback:v=>nf0.format(v),maxTicksLimit:6},title:{display:!!u,text:u,color:'#9AA0A6'}});
 const tipNum=suf=>({callbacks:{label:c=>c.dataset.label+': '+nf0.format(c.parsed.y)+' '+suf}});
 const RED='#CB2A24', GOLD='#C8881F', CHAR='#3A3F46', BLUE='#2F5BD6', GREEN='#2FA968';
-let cDay,cBil,cEnergy,cPrice,cCurtail,cHistCurtail,lastSnap,energyRange='days';
+let cDay,cBil,cEnergy,cPrice,cCurtail,cHistCurtail,lastSnap,energyRange='days',energyFrom='',energyTo='';
 
 function buildCharts(s){
   cDay=new Chart(document.getElementById('chartDay'),{type:'line',
@@ -735,15 +750,24 @@ function buildCharts(s){
 }
 
 /* Energie-Chart je nach Filter (Tage / Monate / Jahre) neu zeichnen */
+const dKey=dt=>`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
 function renderEnergy(range){
   if(!cEnergy || !lastSnap) return;
   energyRange = range;
   const s = lastSnap;
-  const src = range==='months' ? (s.monthly||[]) : range==='years' ? (s.yearly||[]) : (s.daily||[]);
-  let labels, unit, hint, div;
-  if(range==='months'){ labels = src.map(m=>m.label); unit='MWh'; hint='MWh / Monat'; div=1000; }
-  else if(range==='years'){ labels = src.map(y=>y.label); unit='MWh'; hint='MWh / Jahr'; div=1000; }
-  else { labels = src.map(d=>d.date.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})); unit='kWh'; hint='kWh / Tag'; div=1; }
+  const dr = document.getElementById('dateRange'); if(dr) dr.style.display = range==='days' ? 'flex' : 'none';
+  let src, labels, unit, hint, div;
+  if(range==='months'){ src=s.monthly||[]; labels=src.map(m=>m.label); unit='MWh'; hint='MWh / Monat'; div=1000; }
+  else if(range==='years'){ src=s.yearly||[]; labels=src.map(y=>y.label); unit='MWh'; hint='MWh / Jahr'; div=1000; }
+  else {
+    const all=s.dailyAll||s.daily||[];
+    if(energyFrom||energyTo){
+      src=all.filter(d=>{const k=dKey(d.date); return (!energyFrom||k>=energyFrom)&&(!energyTo||k<=energyTo);});
+      hint=src.length+' Tage';
+    } else { src=all.slice(-30); hint='kWh / Tag · letzte 30'; }
+    labels=src.map(d=>d.date.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}));
+    unit='kWh'; div=1;
+  }
   cEnergy.data.labels = labels;
   cEnergy.data.datasets[0].data = src.map(d=>+(d.voll/div).toFixed(div===1?0:1));
   cEnergy.data.datasets[1].data = src.map(d=>+(d.eigen/div).toFixed(div===1?0:1));
@@ -879,6 +903,15 @@ document.getElementById('refreshBtn').addEventListener('click',refresh);
 
 /* Energie-Filter: Tage / Monate / Jahre umschalten */
 document.querySelectorAll('#energyToggle button').forEach(b=>b.addEventListener('click',()=>renderEnergy(b.dataset.range)));
+
+/* Zeitraum-Wähler (Kalender von–bis) für die Tagesansicht */
+(function(){
+  const f=document.getElementById('dFrom'), t=document.getElementById('dTo'), r=document.getElementById('dReset');
+  if(!f) return;
+  const apply=()=>{ energyFrom=f.value||''; energyTo=t.value||''; renderEnergy('days'); };
+  f.addEventListener('change',apply); t.addEventListener('change',apply);
+  r.addEventListener('click',()=>{ f.value=''; t.value=''; energyFrom=''; energyTo=''; renderEnergy('days'); });
+})();
 
 /* ============================================================
    START
