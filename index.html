@@ -400,7 +400,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v25</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v26</span></p>
 
 </main>
 
@@ -514,7 +514,8 @@ const Demo={
       histCurtail:[
         {date:new Date('2026-06-08T12:00:00'),plantKey:'voll',plant:'Volleinspeiser',actual:659,expected:3427,lost:2768,sun:100,dauer:8.7,von:'09:20',bis:'17:55',quelle:'5min'},
         {date:new Date('2026-06-23T12:00:00'),plantKey:'voll',plant:'Volleinspeiser',actual:325,expected:2976,lost:2651,sun:100,dauer:9.1,von:'09:00',bis:'18:00',quelle:'5min'},
-        {date:new Date('2025-08-12T12:00:00'),plantKey:'voll',plant:'Volleinspeiser',actual:277,expected:3320,lost:3043,sun:90,dauer:null,von:null,bis:null,quelle:'tag'}]
+        {date:new Date('2025-08-12T12:00:00'),plantKey:'voll',plant:'Volleinspeiser',actual:277,expected:3320,lost:3043,sun:90,dauer:null,von:null,bis:null,quelle:'tag'}],
+      negDaily:[{tag:'2026-06-08',neg_h:5.5},{tag:'2026-06-23',neg_h:6.25},{tag:'2026-05-12',neg_h:3.0}]
     };
   }
 };
@@ -573,9 +574,9 @@ const Supa = {
     const eigenFeedKwh = Math.max(0, eigenDay - selfKwh);
 
     // 3) Tages- und Monatsenergie (30-Tage / 12-Monate / Monat / Jahr) + Werksverbrauch
-    let daily, monthly, loadD, loadM, histD, histM, zeroEv, histCur;
+    let daily, monthly, loadD, loadM, histD, histM, zeroEv, histCur, negDaily;
     if(_slowCache.daily && (Date.now() - _slowCache.dmTs) < SUPA_DM_TTL){
-      daily = _slowCache.daily; monthly = _slowCache.monthly; loadD = _slowCache.loadD; loadM = _slowCache.loadM; histD = _slowCache.histD; histM = _slowCache.histM; zeroEv = _slowCache.zeroEv; histCur = _slowCache.histCur;
+      daily = _slowCache.daily; monthly = _slowCache.monthly; loadD = _slowCache.loadD; loadM = _slowCache.loadM; histD = _slowCache.histD; histM = _slowCache.histM; zeroEv = _slowCache.zeroEv; histCur = _slowCache.histCur; negDaily = _slowCache.negDaily;
     } else {
       daily   = await this._q('pv_daily?select=plant,tag,gen_kwh&order=tag.asc').catch(() => []);
       monthly = await this._q('pv_monthly?select=plant,monat,gen_kwh&order=monat.asc').catch(() => []);
@@ -585,7 +586,8 @@ const Supa = {
       histM   = await this._q('pv_hist_monthly?select=plant,monat,gen_kwh&order=monat.asc').catch(() => []);
       zeroEv  = await this._q('pv_zero_events?select=plant,von,bis,dauer_min&order=von.asc').catch(() => []);  // echte Abschaltungen (0 kW tagsüber)
       histCur = await this._q('pv_hist_curtail?select=plant,tag,actual_kwh,expected_kwh,lost_kwh,sun_pct,dauer_h,von,bis,quelle&order=tag.asc').catch(() => []);  // Abregelung-Historie (5min/geschätzt)
-      _slowCache.daily = daily; _slowCache.monthly = monthly; _slowCache.loadD = loadD; _slowCache.loadM = loadM; _slowCache.histD = histD; _slowCache.histM = histM; _slowCache.zeroEv = zeroEv; _slowCache.histCur = histCur; _slowCache.dmTs = Date.now();
+      negDaily = await this._q('pv_spot_neg_daily?select=tag,neg_h&order=tag.asc').catch(() => []);  // Negativpreis-Stunden je Tag (Bericht)
+      _slowCache.daily = daily; _slowCache.monthly = monthly; _slowCache.loadD = loadD; _slowCache.loadM = loadM; _slowCache.histD = histD; _slowCache.histM = histM; _slowCache.zeroEv = zeroEv; _slowCache.histCur = histCur; _slowCache.negDaily = negDaily; _slowCache.dmTs = Date.now();
     }
 
     // Tageskarte: erst Historie, dann Live (Live hat Vorrang bei gleichem Datum)
@@ -697,7 +699,8 @@ const Supa = {
       yearly: yearlyArr,
       spot: { price, feedTot, price48, labels48, feed48, now: price[nowIdx] || 0, avg: spAvg, min: spMin, max: spMax, negHours: negH, negFeedKwh: negFeed, rule: EEG_RULE.voll.name },
       curtail: zeroEvents.concat(deriveCurtail(price, feedTot, labels, nowIdx, now)),
-      histCurtail
+      histCurtail,
+      negDaily: (negDaily || []).map(r => ({ tag: r.tag, neg_h: r.neg_h || 0 }))
     };
   }
 };
@@ -1036,33 +1039,39 @@ function renderReport(){
   const inRange=k=>k>=from&&k<=to;
   const days=(lastSnap.dailyAll||[]).filter(d=>inRange(dKey(d.date)));
   const hc=(lastSnap.histCurtail||[]).filter(e=>inRange(dKey(e.date)));
+  const neg=(lastSnap.negDaily||[]).filter(e=>inRange(e.tag));
+  const tV=CONFIG.feedTariff.voll;
   const B=new Map();
-  const add=(dt,fn)=>{ const [k,l]=repBucket(dt,reportGran); const o=B.get(k)||{label:l,voll:0,eigen:0,lost:0}; fn(o); B.set(k,o); };
+  const add=(dt,fn)=>{ const [k,l]=repBucket(dt,reportGran); const o=B.get(k)||{label:l,voll:0,eigen:0,lost:0,neg:0}; fn(o); B.set(k,o); };
   days.forEach(d=>add(d.date,o=>{o.voll+=d.voll||0;o.eigen+=d.eigen||0;}));
   hc.forEach(e=>add(e.date,o=>{o.lost+=e.lost||0;}));
+  neg.forEach(e=>add(new Date(e.tag+'T12:00:00'),o=>{o.neg+=e.neg_h||0;}));
   const rows=[...B.entries()].sort((a,b)=>a[0]<b[0]?-1:1).map(e=>e[1]);
-  const tot=rows.reduce((a,r)=>({voll:a.voll+r.voll,eigen:a.eigen+r.eigen,lost:a.lost+r.lost}),{voll:0,eigen:0,lost:0});
+  const tot=rows.reduce((a,r)=>({voll:a.voll+r.voll,eigen:a.eigen+r.eigen,lost:a.lost+r.lost,neg:a.neg+r.neg}),{voll:0,eigen:0,lost:0,neg:0});
   const fmtD=s=>{const p=s.split('-');return p[2]+'.'+p[1]+'.'+p[0];};
   const gname={days:'Tag',weeks:'Woche',months:'Monat',years:'Jahr'}[reportGran];
   const lv=hc.filter(e=>e.plantKey==='voll').length, le=hc.filter(e=>e.plantKey==='eigen').length;
-  const negToday=lastSnap.spot?(lastSnap.spot.negHours||0):0;
   const r0=v=>nf0.format(Math.round(v));
+  const eur=v=>nf0.format(Math.round(v))+' €';
   let h=`<div class="rep-h1">Energie-Auswertung · Alzinger Maschinenbau</div>
   <div class="rep-sub">Zeitraum ${fmtD(from)} – ${fmtD(to)} · Einteilung: pro ${gname} · erstellt ${new Date().toLocaleDateString('de-DE')}</div>
   <div class="rep-kpis">
     <div class="rep-kpi"><div class="k">Ertrag Volleinspeiser</div><div class="v" style="color:var(--brand)">${r0(tot.voll)} kWh</div></div>
     <div class="rep-kpi"><div class="k">Ertrag Eigenverbrauch</div><div class="v" style="color:var(--gold)">${r0(tot.eigen)} kWh</div></div>
+    <div class="rep-kpi"><div class="k">Einspeisevergütung Volleinspeiser</div><div class="v" style="color:var(--green)">${eur(tot.voll*tV)}</div></div>
     <div class="rep-kpi"><div class="k">Entgangene Erzeugung (Abregelung)</div><div class="v" style="color:var(--brand)">${r0(tot.lost)} kWh</div></div>
     <div class="rep-kpi"><div class="k">Abschalt-Tage</div><div class="v">${hc.length} <small style="font-weight:600;color:var(--muted)">(Voll ${lv} · Eigen ${le})</small></div></div>
+    <div class="rep-kpi"><div class="k">Negativpreis-Stunden</div><div class="v">${nf1.format(tot.neg)} <small style="font-weight:600;color:var(--muted)">Std.</small></div></div>
   </div>
-  <div class="rep-sec">Ertrag & Abregelung pro ${gname}</div>
-  <table class="tbl"><thead><tr><th>${gname}</th><th>Voll kWh</th><th>Eigen kWh</th><th>Summe</th><th>Entgangen</th></tr></thead><tbody>`;
-  rows.forEach(r=>{ h+=`<tr><td>${r.label}</td><td>${r0(r.voll)}</td><td>${r0(r.eigen)}</td><td>${r0(r.voll+r.eigen)}</td><td>${r.lost?r0(r.lost):'–'}</td></tr>`; });
-  h+=`<tr class="sum"><td>Summe</td><td>${r0(tot.voll)}</td><td>${r0(tot.eigen)}</td><td>${r0(tot.voll+tot.eigen)}</td><td>${r0(tot.lost)}</td></tr></tbody></table>
-  <div class="rep-sec">EEG-Regelung & Negativpreis</div>
+  <div class="rep-sec">Ertrag, Abregelung, Negativpreis & Vergütung pro ${gname}</div>
+  <table class="tbl"><thead><tr><th>${gname}</th><th>Voll kWh</th><th>Eigen kWh</th><th>Entgangen</th><th>Neg. Std.</th><th>Verg. €</th></tr></thead><tbody>`;
+  rows.forEach(r=>{ h+=`<tr><td>${r.label}</td><td>${r0(r.voll)}</td><td>${r0(r.eigen)}</td><td>${r.lost?r0(r.lost):'–'}</td><td>${r.neg?nf1.format(r.neg):'–'}</td><td>${eur(r.voll*tV)}</td></tr>`; });
+  h+=`<tr class="sum"><td>Summe</td><td>${r0(tot.voll)}</td><td>${r0(tot.eigen)}</td><td>${r0(tot.lost)}</td><td>${nf1.format(tot.neg)}</td><td>${eur(tot.voll*tV)}</td></tr></tbody></table>
+  <div class="rep-sec">EEG-Regelung & Hinweise</div>
   <p class="finehint">Volleinspeiser: ${EEG_RULE.voll.name} (Inbetriebnahme ${EEG_RULE.voll.inbetriebnahme}).<br>
   Eigenverbrauch: ${EEG_RULE.eigen.name} (Inbetriebnahme ${EEG_RULE.eigen.inbetriebnahme}).<br>
-  Negativer Börsenpreis heute: ${nf1.format(negToday)} Std. · Historische Negativpreis-Stunden über den gesamten Zeitraum werden ab jetzt laufend mitgeschrieben (Rückwirkung auf Wunsch nachladbar).</p>`;
+  Einspeisevergütung Volleinspeiser = Erzeugung × ${nf1.format(tV*100)} ct/kWh. Eigenverbrauch-Einspeisung (6,387 ct) ist standortbedingt erst ab Live-Betrieb tagesgenau und hier nicht enthalten.<br>
+  Negativpreis-Stunden aus den Börsenpreisen (DE-LU); leere Zeiträume = noch keine Preisdaten hinterlegt.</p>`;
   area.innerHTML=h;
 }
 (function(){
