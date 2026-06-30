@@ -54,7 +54,9 @@ PLANTS = {
     },
     "eigen": {
         "host": os.getenv("LOGGER_EIGEN_HOST", "192.168.100.12"),
-        "inverters": [12, 13, 14, 15, 16, 20],                  # 6 WR
+        # Reihenfolge = SmartLogger-Nummern WR1..WR6 (WR3<->WR4 getauscht):
+        # WR1=12, WR2=13, WR3=15, WR4=14, WR5=16(40kW), WR6=20(40kW)
+        "inverters": [12, 13, 15, 14, 16, 20],                  # 6 WR (= SmartLogger WR1..6)
         "meter": 11,                                            # Messgeraet_NAP
     },
 }
