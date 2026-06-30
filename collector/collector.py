@@ -69,6 +69,10 @@ POLL_SECONDS = int(os.getenv("POLL_SECONDS", "60"))
 # (z.B. POLL_SECONDS=10 für eine flotte Live-Anzeige), ohne die Historie/DB
 # mit zu vielen Zeilen zu fluten.
 SAMPLE_SECONDS = int(os.getenv("SAMPLE_SECONDS", "60"))
+# Zeitreihe der String-Werte (pv_string_samples) – für die spätere Auswertung.
+# Seltener als der normale Sample-Takt, damit die DB nicht zu schnell waechst.
+# 0 = aus.
+STRING_SAMPLE_SECONDS = int(os.getenv("STRING_SAMPLE_SECONDS", "300"))   # alle 5 Min
 # Börsen-Spotpreise (Energy-Charts) server-seitig holen und nach pv_spot schreiben.
 # So muss der Browser sie nicht selbst laden (kein CORS-Problem). 0 = aus.
 SPOT_SECONDS = int(os.getenv("SPOT_SECONDS", "900"))   # alle 15 Min
@@ -341,6 +345,23 @@ def write_inverters(inv_rows, ts_iso):
         print(f"  ! pv_inverter-Schreibfehler: {e}")
 
 
+def write_string_samples(inv_rows, ts_iso):
+    """Zeitreihe der String-Werte nach pv_string_samples (für die Auswertung)."""
+    rows = [{"plant": r["plant"], "wr": r["wr"], "strings": r.get("strings"), "ts": ts_iso}
+            for r in inv_rows if r.get("strings")]
+    if not rows:
+        return
+    try:
+        resp = requests.post(
+            f"{SUPABASE_URL}/rest/v1/pv_string_samples",
+            headers=_headers(), json=rows, timeout=15,
+        )
+        if not resp.ok:
+            print(f"  ! pv_string_samples {resp.status_code}: {resp.text[:150]}")
+    except Exception as e:                           # noqa: BLE001
+        print(f"  ! pv_string_samples-Fehler: {e}")
+
+
 def fetch_and_store_spot():
     """Börsenpreise (Energy-Charts, DE-LU) holen und nach pv_spot schreiben.
     Läuft server-seitig im Collector -> kein CORS-Problem im Browser."""
@@ -390,6 +411,7 @@ def main():
     print(f"Collector gestartet · Poll {POLL_SECONDS}s · Sample {SAMPLE_SECONDS}s · Ziel {SUPABASE_URL}")
     last_sample = 0.0
     last_spot = 0.0
+    last_string = 0.0
     while True:
         t0 = time.time()
 
@@ -435,6 +457,10 @@ def main():
                 write_inverters(inv_all, ts_iso)   # Einzel-WR für die Dach-Ansicht
                 if do_sample:
                     last_sample = t0
+                # String-Zeitreihe (seltener) für die Auswertung
+                if STRING_SAMPLE_SECONDS and (t0 - last_string) >= STRING_SAMPLE_SECONDS:
+                    write_string_samples(inv_all, ts_iso)
+                    last_string = t0
             except Exception as e:               # noqa: BLE001
                 print(f"  ! Supabase-Schreibfehler: {e}")
 

@@ -221,7 +221,7 @@
     background:#f7f7f8;font-weight:800}
   .wrs-head small{font-weight:700;color:var(--muted);font-size:.74rem}
   .wrs-empty{padding:12px 13px;font-size:.8rem;color:var(--muted);font-weight:600}
-  .wrs-row{display:grid;grid-template-columns:78px 1fr auto;gap:11px;align-items:center;
+  .wrs-row{display:grid;grid-template-columns:88px 1fr 112px;gap:11px;align-items:center;
     padding:8px 13px;border-top:1px solid var(--line)}
   .wrs-row .pv{font-weight:800;font-size:.84rem;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .wrs-bar{height:9px;border-radius:5px;background:#eef0f3;overflow:hidden}
@@ -485,7 +485,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v44</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v45</span></p>
 
 </main>
 
@@ -656,6 +656,12 @@ const Supa = {
     return r.json();
   },
   now(){ return new Date(); },
+  // Tagesenergie je String (heute) für einen Wechselrichter – für die Auswertung
+  async stringDaily(pl, wr){
+    const pad = n => String(n).padStart(2,'0'), d = new Date();
+    const tag = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    return this._q(`pv_string_daily?plant=eq.${pl}&wr=eq.${wr}&tag=eq.${tag}&select=pv,energy_wh,avg_w,max_w`).catch(() => []);
+  },
   async snapshot(){
     // 1) Aktueller Stand je Anlage (Pflicht – wirft bei Verbindungsproblem -> Demo-Fallback)
     const live = await this._q('pv_live?select=plant,p_kw,load_kw,feed_kw,grid_kw,total_kwh,ts');
@@ -1194,9 +1200,22 @@ function renderInverters(s){
 
 /* String-Aufklappung: zeigt die einzelnen PV-Eingänge eines Wechselrichters */
 let wrSel=null;
+const _strDaily={};   // 'pl|wr' -> {t, map:{pv:energy_wh}} – Tagesenergie je String
+async function loadStringDaily(pl, wr){
+  const key=pl+'|'+wr, c=_strDaily[key];
+  if(c && Date.now()-c.t < 120000) return c.map;
+  let rows=[]; if(Source.stringDaily){ try{ rows=await Source.stringDaily(pl, wr); }catch(_){ } }
+  const map={}; (rows||[]).forEach(r=>{ map[r.pv]=r.energy_wh; });
+  if(!Object.keys(map).length && CONFIG.mode==='demo' && lastSnap){   // Demo: aus Live-Watt schätzen
+    const o=(lastSnap.inv[pl]||[]).find(x=>x.wr===wr);
+    if(o&&o.strings) o.strings.forEach(s=>{ map[s.pv]=Math.round(s.w*6); });
+  }
+  _strDaily[key]={t:Date.now(), map}; return map;
+}
 function renderStrings(pl, wr){
   const host=document.getElementById('wrStrings'); if(!host) return;
   wrSel={pl, wr};
+  const dmap=(_strDaily[pl+'|'+wr]||{}).map||{};
   const plantName = pl==='voll'?'Volleinspeiser':'Eigenverbrauch';
   const o=(lastSnap&&lastSnap.inv&&(lastSnap.inv[pl]||[]).find(x=>x.wr===wr))||null;
   if(!o || !o.strings || !o.strings.length){
@@ -1215,12 +1234,16 @@ function renderStrings(pl, wr){
     if(s.a<-0.05){ col='var(--brand)'; flag='<span class="wrs-flag bad">rückspeisend</span>'; }
     else if(med>0 && s.w<med*0.5){ col='var(--gold)'; flag='<span class="wrs-flag warn">schwach</span>'; }
     const wpct=Math.max(2,Math.min(100,Math.abs(s.w)/maxW*100));
+    const e=dmap[s.pv];
+    const eTxt=(e!=null)?`<div class="sub">heute ${nf1.format(e/1000)} kWh</div>`:'';
     rows+=`<div class="wrs-row"><span class="pv">PV${s.pv}${flag}</span>`
       +`<span class="wrs-bar"><i style="width:${wpct}%;background:${col}"></i></span>`
-      +`<span class="val">${nf0.format(s.w)}<small> W</small><div class="sub">${nf1.format(s.v)} V · ${nf1.format(s.a)} A</div></span></div>`;
+      +`<span class="val">${nf0.format(s.w)}<small> W</small><div class="sub">${nf1.format(s.v)} V · ${nf1.format(s.a)} A</div>${eTxt}</span></div>`;
   });
   const sum=show.reduce((a,s)=>a+s.w,0);
-  host.innerHTML=`<div class="wrs-card"><div class="wrs-head"><span>${plantName} · WR ${wr}</span><small>${show.length} Strings · ${nf0.format(sum)} W</small></div>${rows}</div>`;
+  const eday=Object.values(dmap).reduce((a,b)=>a+(b||0),0);
+  const dayTxt=eday?` · heute ${nf1.format(eday/1000)} kWh`:'';
+  host.innerHTML=`<div class="wrs-card"><div class="wrs-head"><span>${plantName} · WR ${wr}</span><small>${show.length} Strings · ${nf0.format(sum)} W${dayTxt}</small></div>${rows}</div>`;
 }
 
 function paint(s,first){
@@ -1355,8 +1378,9 @@ document.getElementById('refreshBtn').addEventListener('click',refresh);
 
 /* Dach-Draufsicht: Wechselrichter antippen → Strings aufklappen */
 (function(){ const roof=document.getElementById('wrRoof'); if(!roof) return;
-  roof.addEventListener('click',e=>{ const t=e.target.closest('[data-wr]'); if(!t) return;
-    renderStrings(t.getAttribute('data-pl'), +t.getAttribute('data-wr')); }); })();
+  roof.addEventListener('click',async e=>{ const t=e.target.closest('[data-wr]'); if(!t) return;
+    const pl=t.getAttribute('data-pl'), wr=+t.getAttribute('data-wr');
+    renderStrings(pl, wr); await loadStringDaily(pl, wr); renderStrings(pl, wr); }); })();
 
 /* Energie-Filter: Tage / Monate / Jahre umschalten */
 document.querySelectorAll('#energyToggle button').forEach(b=>b.addEventListener('click',()=>renderEnergy(b.dataset.range)));
