@@ -459,7 +459,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v37</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v38</span></p>
 
 </main>
 
@@ -1090,24 +1090,31 @@ function wrZone(z,kw,nom){
     + `<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="7" fill="url(#roofmods)"/>` + txt;
 }
 function wrSky(x,y,w,h){ return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="#e2e8ef" stroke="#cdd5df" stroke-width="1"/>`; }
-/* Sonnenstand für die Uhrzeit: Bogen Ost (rechts) → oben → West (links).
-   Sonnenauf-/untergang saisonal (Breitengrad Schierling ~48,84°). */
+/* Echter Sonnenstand (Azimut + Höhe) für Schierling: 48,82° N / 12,15° O.
+   Sonne wird nach Himmelsrichtung platziert – morgens bleibt sie länger im
+   Osten (rechts) und wandert erst gegen Mittag nach Süden (unten/Mitte). */
 function wrSunPos(now){
-  const lat=48.84*Math.PI/180;
+  const rad=Math.PI/180, lat=48.825*rad, lon=12.152;
   const start=new Date(now.getFullYear(),0,0);
   const doy=Math.floor((now-start)/86400000);
-  const dec=23.45*Math.PI/180*Math.sin(2*Math.PI*(284+doy)/365);
-  let cosH=-Math.tan(lat)*Math.tan(dec); cosH=Math.max(-1,Math.min(1,cosH));
-  const half=Math.acos(cosH)*12/Math.PI;                 // halbe Tageslänge (h)
-  const m=now.getMonth(), dst=(m>2&&m<10);               // grob Sommerzeit Apr–Okt
-  const noon=dst?13.3:12.3;                              // lokaler Sonnenhöchststand
-  const sr=noon-half, ss=noon+half;
-  const h=now.getHours()+now.getMinutes()/60;
-  if(h<sr||h>ss) return {visible:false};
-  const p=(h-sr)/(ss-sr);                                // 0..1 Ost→West
-  // Nordhalbkugel: Sonne steht im SÜDEN → Bogen entlang der Unterkante,
-  // mittags am tiefsten (Süd/unten), morgens rechts (Ost), abends links (West).
-  return { visible:true, x:620-(620-44)*p, y:566+34*Math.sin(Math.PI*p) };
+  const dec=23.45*rad*Math.sin(2*Math.PI*(284+doy)/365);          // Deklination
+  const m=now.getMonth(), dst=(m>2&&m<10);                        // grob Sommerzeit
+  const tzMer=dst?30:15;                                          // Bezugsmeridian (CEST/CET)
+  const B=2*Math.PI*(doy-81)/364;
+  const eot=9.87*Math.sin(2*B)-7.53*Math.cos(B)-1.5*Math.sin(B);  // Zeitgleichung (min)
+  const clock=now.getHours()+now.getMinutes()/60+now.getSeconds()/3600;
+  const solar=clock+(lon-tzMer)/15+eot/60;                        // wahre Ortssonnenzeit
+  const H=(solar-12)*15*rad;                                      // Stundenwinkel
+  const sinEl=Math.sin(lat)*Math.sin(dec)+Math.cos(lat)*Math.cos(dec)*Math.cos(H);
+  const el=Math.asin(Math.max(-1,Math.min(1,sinEl)));
+  if(el<=0) return {visible:false};                              // Sonne unter Horizont
+  let cosAz=(Math.sin(dec)-Math.sin(lat)*sinEl)/(Math.cos(lat)*Math.cos(el));
+  let az=Math.acos(Math.max(-1,Math.min(1,cosAz)));              // 0..π von Norden
+  if(H>0) az=2*Math.PI-az;                                       // nachmittags → Westen
+  const azDeg=az/rad;                                            // 0=N, 90=O, 180=S, 270=W
+  const a=Math.max(90,Math.min(270,azDeg));                      // Ost..Süd..West aufs Bild
+  const frac=Math.max(0,Math.min(1,el/(60*rad)));               // Höhe 0..~60°
+  return { visible:true, x:620-(a-90)/180*576, y:600-26*frac };
 }
 function renderInverters(s){
   const host=document.getElementById('wrRoof'); if(!host||!s.inv) return;
@@ -1126,13 +1133,13 @@ function renderInverters(s){
     ? `<circle cx="${sp.x.toFixed(0)}" cy="${sp.y.toFixed(0)}" r="46" fill="url(#sunG)"/><circle cx="${sp.x.toFixed(0)}" cy="${sp.y.toFixed(0)}" r="10" fill="#F7B733"/>`
     : '';
   host.innerHTML =
-    `<svg viewBox="0 0 660 640" xmlns="http://www.w3.org/2000/svg" font-family="Manrope,sans-serif">`
+    `<svg viewBox="0 0 660 650" xmlns="http://www.w3.org/2000/svg" font-family="Manrope,sans-serif">`
     + `<defs><pattern id="roofmods" width="13" height="13" patternUnits="userSpaceOnUse">`
     + `<path d="M13 0V13M0 13H13" stroke="rgba(20,26,34,.13)" stroke-width="1"/></pattern>`
     + `<radialGradient id="sunG"><stop offset="0%" stop-color="rgba(255,196,84,.85)"/><stop offset="100%" stop-color="rgba(255,196,84,0)"/></radialGradient></defs>`
     + sun
     + `<text x="330" y="13" text-anchor="middle" font-size="12" font-weight="700" fill="#9AA0A6">N</text>`
-    + `<text x="330" y="634" text-anchor="middle" font-size="12" font-weight="700" fill="#9AA0A6">S</text>`
+    + `<text x="330" y="644" text-anchor="middle" font-size="12" font-weight="700" fill="#9AA0A6">S</text>`
     + `<text x="8" y="300" font-size="12" font-weight="700" fill="#9AA0A6">W</text>`
     + `<text x="652" y="300" text-anchor="end" font-size="12" font-weight="700" fill="#9AA0A6">O</text>`
     + g + `</svg>`;
