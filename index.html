@@ -202,8 +202,11 @@
   .wr-sum .wv{font-weight:800;font-size:1.15rem;font-variant-numeric:tabular-nums;margin-top:2px}
   .wr-roof{width:100%;border-radius:var(--r-sm);overflow:hidden;background:#EEF1F4;border:1px solid var(--line)}
   .wr-roof svg{display:block;width:100%;height:auto}
-  .wr-legend{display:flex;align-items:center;gap:16px;margin-top:11px;font-size:.78rem;font-weight:600;color:var(--muted);flex-wrap:wrap}
+  .wr-legend{display:flex;align-items:center;gap:9px;margin-top:11px;font-size:.78rem;font-weight:600;color:var(--muted);flex-wrap:wrap}
   .wr-legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  .wr-grad{display:inline-block;height:12px;width:140px;border-radius:6px;border:1px solid var(--line);
+    background:linear-gradient(90deg,#b9c2cf 0%,#d6453d 12%,#e08a2a 35%,#e8c331 55%,#7fbf3f 78%,#1ea65a 100%)}
+  .wr-gradlbl{font-size:.72rem;color:var(--muted-2);font-weight:700}
 </style>
 </head>
 <body>
@@ -333,9 +336,10 @@
     </div>
     <div id="wrRoof" class="wr-roof"></div>
     <div class="wr-legend">
-      <span><i style="background:var(--green)"></i>gut</span>
-      <span><i style="background:var(--gold)"></i>mittel</span>
-      <span><i style="background:#c2cbd8"></i>wenig / aus</span>
+      <span>Auslastung</span>
+      <span class="wr-gradlbl">0&nbsp;%</span>
+      <span class="wr-grad"></span>
+      <span class="wr-gradlbl">100&nbsp;%</span>
       <span class="chint" style="margin-left:auto">Norden oben · Sonne aus Osten (rechts)</span>
     </div>
     <p class="finehint">Jede Fläche ist der echte Wechselrichter-Bereich laut Belegungsplan. Farbe &amp; kW kommen live aus der Anlage – morgens liefern die Ostflächen (rechts) zuerst. Auslastung bezogen auf die Nennleistung je WR.</p>
@@ -455,7 +459,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v31</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v32</span></p>
 
 </main>
 
@@ -1044,29 +1048,46 @@ const WR_SITE = [
   { label:'Volleinspeiser · West', plant:'voll', accent:'#CB2A24', capX:20, capY:360,
     zones:[ {wr:10,x:20,y:374,w:86,h:158},{wr:9,x:110,y:374,w:86,h:158} ] },
   { label:'Eigenverbrauch', plant:'eigen', accent:'#C8881F', capX:222, capY:360,
-    sky:[[400,450,64,10],[486,450,64,10],[300,450,40,10]],
     zones:[
       {wr:1,x:222,y:374,w:80,h:158},{wr:2,x:306,y:374,w:80,h:158},
-      {wr:5,x:392,y:374,w:122,h:74},{wr:6,x:518,y:374,w:120,h:74},
-      {wr:3,x:392,y:456,w:122,h:76},{wr:4,x:518,y:456,w:120,h:76},
+      // Osthalle: vier längliche Streifen übereinander (oben→unten): 5 · 6 · 3 · 4
+      {wr:5,x:392,y:374,w:246,h:36},
+      {wr:6,x:392,y:414,w:246,h:36},
+      {wr:3,x:392,y:454,w:246,h:36},
+      {wr:4,x:392,y:494,w:246,h:36},
     ] },
 ];
+/* Durchgehende Farbrampe 0–100 % Auslastung:
+   grau (aus) → rot → orange → gelb → gelbgrün → grün */
+const WR_RAMP = [
+  [0.00,[185,194,207]],  // grau
+  [0.12,[214, 69, 61]],  // rot
+  [0.35,[224,138, 42]],  // orange
+  [0.55,[232,195, 49]],  // gelb
+  [0.78,[127,191, 63]],  // gelbgrün
+  [1.00,[ 30,166, 90]],  // grün
+];
 function wrColor(fr){
-  fr=Math.max(0,Math.min(1.15,fr));
-  let vivid; let g=false;
-  if(fr>=0.6){ vivid=[47,169,104]; g=true; }      // grün
-  else if(fr>=0.3){ vivid=[200,136,31]; }          // gold
-  else { vivid=[150,163,180]; }                    // grau (wenig/aus)
-  const p=[238,241,244], t=Math.min(1,fr*1.18);
-  const f=vivid.map((c,i)=>Math.round(p[i]+(c-p[i])*t));
-  return { fill:`rgb(${f[0]},${f[1]},${f[2]})`, text:(g&&fr>=0.62)?'#fff':'#181A1D' };
+  fr=Math.max(0,Math.min(1,fr));
+  let a=WR_RAMP[0], b=WR_RAMP[WR_RAMP.length-1];
+  for(let i=0;i<WR_RAMP.length-1;i++){ if(fr>=WR_RAMP[i][0] && fr<=WR_RAMP[i+1][0]){ a=WR_RAMP[i]; b=WR_RAMP[i+1]; break; } }
+  const t=(b[0]-a[0]) ? (fr-a[0])/(b[0]-a[0]) : 0;
+  const c=a[1].map((v,k)=>Math.round(v+(b[1][k]-v)*t));
+  const lum=0.299*c[0]+0.587*c[1]+0.114*c[2];   // Textfarbe nach Helligkeit
+  return { fill:`rgb(${c[0]},${c[1]},${c[2]})`, text: lum<150 ? '#fff' : '#181A1D' };
 }
 function wrZone(z,kw,nom){
   const fr=nom>0?kw/nom:0, c=wrColor(fr), cx=z.x+z.w/2, cy=z.y+z.h/2;
+  let txt;
+  if(z.h<52){   // länglicher Streifen: eine Zeile – Label links, kW rechts
+    txt=`<text x="${z.x+13}" y="${cy+5}" font-weight="800" font-size="14" fill="${c.text}">WR ${z.wr}</text>`
+      + `<text x="${z.x+z.w-13}" y="${cy+5}" text-anchor="end" font-weight="700" font-size="13.5" fill="${c.text}" opacity=".92">${fmtKW(kw)} kW</text>`;
+  } else {      // Kachel: zwei Zeilen, zentriert
+    txt=`<text x="${cx}" y="${cy-3}" text-anchor="middle" font-weight="800" font-size="15" fill="${c.text}">WR ${z.wr}</text>`
+      + `<text x="${cx}" y="${cy+15}" text-anchor="middle" font-weight="700" font-size="13.5" fill="${c.text}" opacity=".92">${fmtKW(kw)} kW</text>`;
+  }
   return `<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="7" fill="${c.fill}" stroke="rgba(24,26,29,.22)" stroke-width="1.3"/>`
-    + `<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="7" fill="url(#roofmods)"/>`
-    + `<text x="${cx}" y="${cy-3}" text-anchor="middle" font-weight="800" font-size="15" fill="${c.text}">WR ${z.wr}</text>`
-    + `<text x="${cx}" y="${cy+15}" text-anchor="middle" font-weight="700" font-size="13.5" fill="${c.text}" opacity=".92">${fmtKW(kw)} kW</text>`;
+    + `<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="7" fill="url(#roofmods)"/>` + txt;
 }
 function wrSky(x,y,w,h){ return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="#e2e8ef" stroke="#cdd5df" stroke-width="1"/>`; }
 function renderInverters(s){
