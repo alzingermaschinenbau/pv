@@ -459,7 +459,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v32</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v33</span></p>
 
 </main>
 
@@ -1090,6 +1090,23 @@ function wrZone(z,kw,nom){
     + `<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="7" fill="url(#roofmods)"/>` + txt;
 }
 function wrSky(x,y,w,h){ return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="#e2e8ef" stroke="#cdd5df" stroke-width="1"/>`; }
+/* Sonnenstand für die Uhrzeit: Bogen Ost (rechts) → oben → West (links).
+   Sonnenauf-/untergang saisonal (Breitengrad Schierling ~48,84°). */
+function wrSunPos(now){
+  const lat=48.84*Math.PI/180;
+  const start=new Date(now.getFullYear(),0,0);
+  const doy=Math.floor((now-start)/86400000);
+  const dec=23.45*Math.PI/180*Math.sin(2*Math.PI*(284+doy)/365);
+  let cosH=-Math.tan(lat)*Math.tan(dec); cosH=Math.max(-1,Math.min(1,cosH));
+  const half=Math.acos(cosH)*12/Math.PI;                 // halbe Tageslänge (h)
+  const m=now.getMonth(), dst=(m>2&&m<10);               // grob Sommerzeit Apr–Okt
+  const noon=dst?13.3:12.3;                              // lokaler Sonnenhöchststand
+  const sr=noon-half, ss=noon+half;
+  const h=now.getHours()+now.getMinutes()/60;
+  if(h<sr||h>ss) return {visible:false};
+  const p=(h-sr)/(ss-sr);                                // 0..1 Ost→West
+  return { visible:true, x:620-(620-44)*p, y:44-(44-12)*Math.sin(Math.PI*p) };
+}
 function renderInverters(s){
   const host=document.getElementById('wrRoof'); if(!host||!s.inv) return;
   const find=(pl,wr)=>(s.inv[pl]||[]).find(x=>x.wr===wr);
@@ -1102,12 +1119,16 @@ function renderInverters(s){
       +`<text x="${b.capX+10}" y="${b.capY}" font-size="13" font-weight="700" fill="#737880">${b.label}</text>`;
     b.zones.forEach(z=>{ g+=wrZone(z, kwFor(b.plant,z.wr), nomFor(b.plant,z.wr)); });
   });
+  const sp=wrSunPos(s.now);
+  const sun = sp.visible
+    ? `<circle cx="${sp.x.toFixed(0)}" cy="${sp.y.toFixed(0)}" r="46" fill="url(#sunG)"/><circle cx="${sp.x.toFixed(0)}" cy="${sp.y.toFixed(0)}" r="10" fill="#F7B733"/>`
+    : '';
   host.innerHTML =
     `<svg viewBox="0 0 660 560" xmlns="http://www.w3.org/2000/svg" font-family="Manrope,sans-serif">`
     + `<defs><pattern id="roofmods" width="13" height="13" patternUnits="userSpaceOnUse">`
     + `<path d="M13 0V13M0 13H13" stroke="rgba(20,26,34,.13)" stroke-width="1"/></pattern>`
     + `<radialGradient id="sunG"><stop offset="0%" stop-color="rgba(255,196,84,.85)"/><stop offset="100%" stop-color="rgba(255,196,84,0)"/></radialGradient></defs>`
-    + `<circle cx="636" cy="20" r="48" fill="url(#sunG)"/><circle cx="636" cy="20" r="10" fill="#F7B733"/>`
+    + sun
     + `<text x="330" y="13" text-anchor="middle" font-size="12" font-weight="700" fill="#9AA0A6">N</text>`
     + `<text x="330" y="556" text-anchor="middle" font-size="12" font-weight="700" fill="#9AA0A6">S</text>`
     + `<text x="8" y="300" font-size="12" font-weight="700" fill="#9AA0A6">W</text>`
