@@ -46,7 +46,10 @@ except ImportError:
 PLANTS = {
     "voll": {
         "host": os.getenv("LOGGER_VOLL_HOST", "192.168.100.22"),
-        "inverters": [12, 13, 14, 15, 16, 17, 18, 19, 20, 21],  # 10 WR
+        # Reihenfolge = SmartLogger-/FusionSolar-Nummern WR1..WR10.
+        # WRn -> COM-Adresse (per Ausschalt-Tests bestaetigt):
+        # WR1=15, WR2=20, WR3=12, WR4=14, WR5=18, WR6=13, WR7=17, WR8=21, WR9=16, WR10=19
+        "inverters": [15, 20, 12, 14, 18, 13, 17, 21, 16, 19],  # 10 WR (= SmartLogger WR1..10)
         "meter": None,                                          # kein Zähler
     },
     "eigen": {
