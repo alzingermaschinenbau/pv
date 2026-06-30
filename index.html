@@ -459,7 +459,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v35</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v36</span></p>
 
 </main>
 
@@ -1081,10 +1081,10 @@ function wrZone(z,kw,nom){
   let txt;
   if(z.h<52){   // länglicher Streifen: eine Zeile – Label links, kW rechts
     txt=`<text x="${z.x+13}" y="${cy+5}" font-weight="800" font-size="14" fill="${c.text}">WR ${z.wr}</text>`
-      + `<text x="${z.x+z.w-13}" y="${cy+5}" text-anchor="end" font-weight="700" font-size="13.5" fill="${c.text}" opacity=".92">${fmtKW(kw)} kW</text>`;
+      + `<text x="${z.x+z.w-13}" y="${cy+5}" text-anchor="end" font-weight="700" font-size="13.5" fill="${c.text}" opacity=".92">${nf1.format(kw)} kW</text>`;
   } else {      // Kachel: zwei Zeilen, zentriert
     txt=`<text x="${cx}" y="${cy-3}" text-anchor="middle" font-weight="800" font-size="15" fill="${c.text}">WR ${z.wr}</text>`
-      + `<text x="${cx}" y="${cy+15}" text-anchor="middle" font-weight="700" font-size="13.5" fill="${c.text}" opacity=".92">${fmtKW(kw)} kW</text>`;
+      + `<text x="${cx}" y="${cy+15}" text-anchor="middle" font-weight="700" font-size="13.5" fill="${c.text}" opacity=".92">${nf1.format(kw)} kW</text>`;
   }
   return `<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="7" fill="${c.fill}" stroke="rgba(24,26,29,.22)" stroke-width="1.3"/>`
     + `<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="7" fill="url(#roofmods)"/>` + txt;
