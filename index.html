@@ -212,6 +212,20 @@
   .wr-grad{display:inline-block;height:12px;width:140px;border-radius:6px;border:1px solid var(--line);
     background:linear-gradient(90deg,#b9c2cf 0%,#d6453d 12%,#e08a2a 35%,#e8c331 55%,#7fbf3f 78%,#1ea65a 100%)}
   .wr-gradlbl{font-size:.72rem;color:var(--muted-2);font-weight:700}
+  /* Störungs-Box (auffällige Strings, live) */
+  .wr-faults{margin-bottom:12px}
+  .wr-faults.ok{display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:var(--r-sm);
+    background:#EEF7EE;border:1px solid #CDE6CD;color:#2C7A2C;font-weight:700;font-size:.8rem}
+  .wrf-card{border:1px solid var(--brand-soft);border-radius:var(--r-sm);overflow:hidden;background:var(--brand-soft)}
+  .wrf-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 13px;
+    font-weight:800;color:var(--brand);font-size:.84rem}
+  .wrf-row{display:flex;align-items:center;gap:9px;padding:8px 13px;border-top:1px solid rgba(0,0,0,.06);
+    background:var(--card);cursor:pointer;font-size:.82rem}
+  .wrf-row .wrf-wr{font-weight:800;min-width:78px}
+  .wrf-row .wrf-pv{font-weight:700;color:var(--muted-2)}
+  .wrf-row .wrf-flag{margin-left:auto;font-size:.64rem;font-weight:800;padding:1px 7px;border-radius:999px}
+  .wrf-row .wrf-flag.bad{background:var(--brand);color:#fff}
+  .wrf-row .wrf-flag.warn{background:#F2C94C;color:#5b3d00}
   /* String-Aufklappung (PV-Eingänge je WR) */
   .wr-strings{margin-top:12px}
   .wrs-hint{font-size:.8rem;color:var(--muted-2);font-weight:600;text-align:center;padding:8px;
@@ -359,6 +373,7 @@
       <div><div class="wk">Ø Auslastung</div><div class="wv" id="wr-avg" style="color:var(--green)">–</div></div>
       <div><div class="wk">schwächster WR</div><div class="wv" id="wr-min" style="color:var(--gold);font-size:1rem">–</div></div>
     </div>
+    <div id="wrFaults" class="wr-faults"></div>
     <div id="wrRoof" class="wr-roof"></div>
     <div id="wrStrings" class="wr-strings"><div class="wrs-hint">Wechselrichter antippen → einzelne Strings (PV-Eingänge)</div></div>
     <div class="wr-legend">
@@ -485,7 +500,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v47</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v49</span></p>
 
 </main>
 
@@ -601,6 +616,25 @@ const Demo={
   now(){return new Date(this._simBase+(Date.now()-this._start));},
   idxNow(){const n=this.now();const h=n.getHours()+n.getMinutes()/60;return Math.min(N-1,Math.floor(h*60/STEP));},
   jit(){return 0.985+0.03*rnd();},
+  // Demo-Variante des String-Genauberichts: erzeugt je String Tageswerte über den Zeitraum.
+  async stringRange(from, to){
+    const pad=n=>String(n).padStart(2,'0');
+    const d1=new Date(from+'T12:00:00'), d2=new Date(to+'T12:00:00');
+    const nDays=Math.min(31, Math.max(1, Math.round((d2-d1)/864e5)+1));   // Demo nur illustrativ → max 31 Tage
+    const rows=[];
+    const mk=(key,nomArr)=>nomArr.forEach((nom,wi)=>{ const wr=wi+1;
+      for(let p=1;p<=7;p++) for(let dd=0; dd<nDays; dd++){
+        const day=new Date(d2); day.setDate(d2.getDate()-dd);
+        const tag=`${day.getFullYear()}-${pad(day.getMonth()+1)}-${pad(day.getDate())}`;
+        let wh=nom/7*5.4*1000*(0.7+0.5*rnd()), mw=nom/7*1000*(0.8+0.2*rnd());
+        if(key==='voll'&&wr===2&&p===1){ wh=-Math.abs(wh)*0.03; mw=-45; }     // rückspeisend
+        if(key==='voll'&&wr===5&&p===5){ wh*=0.15; mw*=0.18; }                 // schwach
+        rows.push({plant:key,wr,pv:p,tag,energy_wh:Math.round(wh),max_w:Math.round(mw)});
+      }
+    });
+    mk('voll',CONFIG.invNominal.voll); mk('eigen',CONFIG.invNominal.eigen);
+    return rows;
+  },
   snapshot(){
     const i=this.idxNow(), j=this.jit();
     const vollKw=vollC[i]*j, pvKw=eigenC[i]*j, loadKw=loadC[i]*(0.98+0.04*rnd());
@@ -661,6 +695,10 @@ const Supa = {
     const pad = n => String(n).padStart(2,'0'), d = new Date();
     const tag = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
     return this._q(`pv_string_daily?plant=eq.${pl}&wr=eq.${wr}&tag=eq.${tag}&select=pv,energy_wh,avg_w,max_w`).catch(() => []);
+  },
+  // ALLE Strings über einen Zeitraum (für den String-Genaubericht im PDF)
+  async stringRange(from, to){
+    return this._q(`pv_string_daily?tag=gte.${from}&tag=lte.${to}&select=plant,wr,pv,tag,energy_wh,max_w&order=plant.asc,wr.asc,pv.asc&limit=200000`).catch(() => []);
   },
   async snapshot(){
     // 1) Aktueller Stand je Anlage (Pflicht – wirft bei Verbindungsproblem -> Demo-Fallback)
@@ -1204,7 +1242,33 @@ function renderInverters(s){
   document.getElementById('wr-tot').textContent=fmtKW(tot)+' kW';
   document.getElementById('wr-avg').textContent=nf0.format(avg)+' %';
   document.getElementById('wr-min').textContent=`${weak.pl==='voll'?'V':'E'}·WR${weak.wr} · ${nf0.format(fr(weak)*100)}%`;
+  renderFaults(s);                               // Störungs-Box oben aktualisieren
   if(wrSel) renderStrings(wrSel.pl, wrSel.wr);   // offenes String-Panel live aktualisieren
+}
+
+/* Störungs-Box: scannt alle Wechselrichter live nach auffälligen Strings
+   (rückspeisend = negativer Strom; schwach = deutlich unter den Nachbarn).
+   Nur produzierende WR werden bewertet – ein abgeschalteter WR ist kein Fehler. */
+function renderFaults(s){
+  const host=document.getElementById('wrFaults'); if(!host||!s.inv) return;
+  const faults=[];
+  ['voll','eigen'].forEach(pl=>{ (s.inv[pl]||[]).forEach(o=>{
+    if(!o.strings || !o.strings.length || (o.kw||0)<0.4) return;   // WR aus → nicht bewerten
+    const pos=o.strings.map(x=>x.w).filter(w=>w>0).sort((a,b)=>a-b);
+    const med=pos.length?pos[Math.floor(pos.length/2)]:0;
+    o.strings.forEach(x=>{
+      if(x.a<-0.05) faults.push({pl,wr:o.wr,pv:x.pv,st:'bad'});
+      else if(med>0 && Math.abs(x.a)>0.05 && x.w<med*0.5) faults.push({pl,wr:o.wr,pv:x.pv,st:'warn'});
+    });
+  }); });
+  if(!faults.length){ host.className='wr-faults ok'; host.innerHTML='✓ Keine Störungen – alle Strings liefern plausibel.'; return; }
+  faults.sort((a,b)=> a.st===b.st?0 : a.st==='bad'?-1:1);
+  const pn=pl=>pl==='voll'?'V':'E';
+  const rows=faults.map(f=>`<div class="wrf-row" data-pl="${f.pl}" data-wr="${f.wr}">`
+    +`<span class="wrf-wr">${pn(f.pl)} · WR ${f.wr}</span><span class="wrf-pv">PV${f.pv}</span>`
+    +`<span class="wrf-flag ${f.st}">${f.st==='bad'?'rückspeisend':'schwach'}</span></div>`).join('');
+  host.className='wr-faults';
+  host.innerHTML=`<div class="wrf-card"><div class="wrf-head"><span>⚠ ${faults.length} Störung${faults.length>1?'en':''} · auffällige Strings</span><span style="font-weight:700;font-size:.72rem;color:var(--muted-2)">antippen für Details</span></div>${rows}</div>`;
 }
 
 /* String-Aufklappung: zeigt die einzelnen PV-Eingänge eines Wechselrichters */
@@ -1390,11 +1454,18 @@ document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
   const el=document.getElementById(t.dataset.target);if(el)window.scrollTo({top:el.getBoundingClientRect().top+window.scrollY-72,behavior:'smooth'});}));
 document.getElementById('refreshBtn').addEventListener('click',refresh);
 
-/* Dach-Draufsicht: Wechselrichter antippen → Strings aufklappen */
-(function(){ const roof=document.getElementById('wrRoof'); if(!roof) return;
-  roof.addEventListener('click',async e=>{ const t=e.target.closest('[data-wr]'); if(!t) return;
-    const pl=t.getAttribute('data-pl'), wr=+t.getAttribute('data-wr');
-    renderStrings(pl, wr); await loadStringDaily(pl, wr); renderStrings(pl, wr); }); })();
+/* Dach-Draufsicht: Wechselrichter (oder Störungs-Eintrag) antippen → Strings aufklappen */
+async function openStrings(pl, wr){
+  renderStrings(pl, wr); await loadStringDaily(pl, wr); renderStrings(pl, wr);
+  const sp=document.getElementById('wrStrings'); if(sp) sp.scrollIntoView({behavior:'smooth', block:'center'});
+}
+(function(){ const roof=document.getElementById('wrRoof'); if(roof)
+  roof.addEventListener('click',e=>{ const t=e.target.closest('[data-wr]'); if(!t) return;
+    openStrings(t.getAttribute('data-pl'), +t.getAttribute('data-wr')); });
+  const fb=document.getElementById('wrFaults'); if(fb)
+  fb.addEventListener('click',e=>{ const t=e.target.closest('[data-wr]'); if(!t) return;
+    openStrings(t.getAttribute('data-pl'), +t.getAttribute('data-wr')); });
+})();
 
 /* Energie-Filter: Tage / Monate / Jahre umschalten */
 document.querySelectorAll('#energyToggle button').forEach(b=>b.addEventListener('click',()=>renderEnergy(b.dataset.range)));
@@ -1468,7 +1539,74 @@ function renderReport(){
   Eigenverbrauch: ${EEG_RULE.eigen.name} (Inbetriebnahme ${EEG_RULE.eigen.inbetriebnahme}).<br>
   Einspeisevergütung Volleinspeiser = Erzeugung × ${nf1.format(tV*100)} ct/kWh. Eigenverbrauch-Einspeisung (6,387 ct) ist standortbedingt erst ab Live-Betrieb tagesgenau und hier nicht enthalten.<br>
   Negativpreis-Stunden aus den Börsenpreisen (DE-LU); leere Zeiträume = noch keine Preisdaten hinterlegt.</p>`;
-  area.innerHTML=h;
+  // String-Genaubericht (jeder einzelne PV-String) – asynchron, daher Platzhalter + Nachladen
+  area.innerHTML = h + `<div id="repStrings"><div class="rep-sec">String-Genaubericht je Wechselrichter</div><p class="finehint">String-Aufzeichnung wird geladen …</p></div>`;
+  const cached = (_strRep.key === from+'|'+to) ? _strRep.rows : null;
+  const fill = rows => { const sr=document.getElementById('repStrings'); if(sr && _strRep.key===from+'|'+to) sr.innerHTML = buildStringReportHTML(rows, from, to); };
+  if(cached) fill(cached);
+  else ensureStringReport(from, to).then(rows => { if(rows) fill(rows); });
+}
+
+/* String-Genaubericht: lädt die Tagesenergie ALLER Strings über den Zeitraum
+   und baut je Wechselrichter eine String-genaue Tabelle + Störungs-Übersicht. */
+let _strRep = { key:'', rows:null, loading:false };
+async function ensureStringReport(from, to){
+  const key = from+'|'+to;
+  if(_strRep.key===key && _strRep.rows) return _strRep.rows;
+  let rows=[]; try{ if(Source.stringRange) rows = await Source.stringRange(from, to) || []; }catch(_){ }
+  _strRep = { key, rows, loading:false };
+  return rows;
+}
+function buildStringReportHTML(rows, from, to){
+  const fmtD=s=>{const p=s.split('-');return p[2]+'.'+p[1]+'.'+p[0];};
+  if(!rows || !rows.length){
+    return `<div class="rep-sec">String-Genaubericht je Wechselrichter</div>
+      <p class="finehint">Für ${fmtD(from)} – ${fmtD(to)} liegen noch keine String-Aufzeichnungen vor. Die genaue Einzel-String-Aufzeichnung läuft ab dem Tag, an dem der aktualisierte Collector aktiv ist – ab dann füllt sich dieser Bericht Tag für Tag.</p>`;
+  }
+  // 1) gruppieren je plant|wr|pv
+  const G=new Map();
+  rows.forEach(r=>{ const k=r.plant+'|'+r.wr+'|'+r.pv; let o=G.get(k);
+    if(!o){ o={plant:r.plant, wr:r.wr, pv:r.pv, wh:0, maxW:0, days:new Set()}; G.set(k,o); }
+    o.wh+=r.energy_wh||0; o.maxW=Math.max(o.maxW, r.max_w||0); if(r.tag) o.days.add(r.tag); });
+  const P={ voll:{name:'Volleinspeiser', tariff:CONFIG.feedTariff.voll, wr:new Map()},
+            eigen:{name:'Eigenverbrauch', tariff:CONFIG.feedTariff.eigen, wr:new Map()} };
+  [...G.values()].forEach(o=>{ const pl=P[o.plant]; if(!pl) return; if(!pl.wr.has(o.wr)) pl.wr.set(o.wr,[]); pl.wr.get(o.wr).push(o); });
+  // 2) Tabellen + Störungserkennung
+  const faults=[];
+  let tbl='';
+  for(const pk of ['voll','eigen']){
+    const pl=P[pk]; const wrs=[...pl.wr.keys()].sort((a,b)=>a-b); if(!wrs.length) continue;
+    tbl+=`<div class="rep-sec" style="font-size:.95rem;margin-top:14px">${pl.name}</div>`;
+    wrs.forEach(wr=>{
+      const list=pl.wr.get(wr).sort((a,b)=>a.pv-b.pv);
+      const posK=list.map(o=>o.wh).filter(w=>w>0).sort((a,b)=>a-b);
+      const med=posK.length?posK[Math.floor(posK.length/2)]:0;
+      tbl+=`<div class="rep-tblwrap"><table class="tbl"><thead><tr><th>WR ${wr} · String</th><th>kWh</th><th>Max W</th><th>Tage</th><th>Status</th></tr></thead><tbody>`;
+      list.forEach(o=>{
+        const kwh=o.wh/1000; let st='ok', txt='✓ ok', sty='';
+        if(o.wh<0){ st='bad'; txt='rückspeisend'; sty='color:var(--brand);font-weight:800'; }
+        else if(med>0 && o.wh<med*0.5){ st='warn'; txt='schwach'; sty='color:#9a6a12;font-weight:800'; }
+        if(st!=='ok'){ const lost=Math.max(0,(med-o.wh)/1000); faults.push({plantName:pl.name, wr, pv:o.pv, st, kwh, lost, eur:lost*pl.tariff}); }
+        tbl+=`<tr><td>PV${o.pv}</td><td>${nf1.format(kwh)}</td><td>${nf0.format(o.maxW)}</td><td>${o.days.size}</td><td style="${sty}">${txt}</td></tr>`;
+      });
+      tbl+=`</tbody></table></div>`;
+    });
+  }
+  // 3) Störungs-Übersicht (oben)
+  let head=`<div class="rep-sec">String-Genaubericht je Wechselrichter</div>
+    <p class="rep-sub">Jeder einzelne PV-String über ${fmtD(from)} – ${fmtD(to)} · Grundlage: laufende String-Aufzeichnung (alle 5&nbsp;Min)</p>`;
+  if(faults.length){
+    faults.sort((a,b)=>b.lost-a.lost);
+    const tl=faults.reduce((a,f)=>a+f.lost,0), te=faults.reduce((a,f)=>a+f.eur,0);
+    head+=`<div class="rep-sec" style="color:var(--brand)">⚠ Störungen / auffällige Strings</div>
+      <div class="rep-tblwrap"><table class="tbl"><thead><tr><th>Anlage</th><th>WR</th><th>String</th><th>Status</th><th>erzeugt kWh</th><th>entgangen ~kWh</th><th>~€</th></tr></thead><tbody>`;
+    faults.forEach(f=>{ head+=`<tr><td>${f.plantName}</td><td>${f.wr}</td><td>PV${f.pv}</td><td style="${f.st==='bad'?'color:var(--brand)':'color:#9a6a12'};font-weight:800">${f.st==='bad'?'rückspeisend':'schwach'}</td><td>${nf1.format(f.kwh)}</td><td>${nf0.format(f.lost)}</td><td>${nf0.format(f.eur)} €</td></tr>`; });
+    head+=`<tr class="sum"><td colspan="5">Summe entgangen (Schätzung)</td><td>${nf0.format(tl)}</td><td>${nf0.format(te)} €</td></tr></tbody></table></div>
+      <p class="finehint">Entgangene Menge geschätzt als Differenz zum Median der gesunden Strings desselben Wechselrichters. „rückspeisend" = String speist rückwärts (Defekt/Verschattung/Diode); „schwach" = deutlich unter den Nachbar-Strings. Tatsächlicher Verlust kann höher sein, wenn der Fehler vor dem Aufzeichnungsbeginn begann.</p>`;
+  } else {
+    head+=`<div class="rep-sec">Störungen</div><p class="finehint">Keine auffälligen Strings im Zeitraum – alle PV-Eingänge liefern plausibel. ✓</p>`;
+  }
+  return head + tbl;
 }
 (function(){
   const rf=document.getElementById('rFrom'), rt=document.getElementById('rTo'); if(!rf) return;
@@ -1478,7 +1616,15 @@ function renderReport(){
   document.querySelectorAll('#reportToggle button').forEach(b=>b.addEventListener('click',()=>{
     reportGran=b.dataset.g; document.querySelectorAll('#reportToggle button').forEach(x=>x.classList.toggle('active',x===b)); renderReport();
   }));
-  document.getElementById('reportPdf').addEventListener('click',()=>{ renderReport(); setTimeout(()=>window.print(),60); });
+  document.getElementById('reportPdf').addEventListener('click',async ()=>{
+    const btn=document.getElementById('reportPdf'), lbl=btn.textContent;
+    const from=(document.getElementById('rFrom').value)||'2024-01-01';
+    const to=(document.getElementById('rTo').value)||dKey(new Date());
+    btn.disabled=true; btn.textContent='String-Daten werden geladen …';
+    try{ await ensureStringReport(from, to); }catch(_){ }   // String-Tabellen müssen im PDF stehen
+    btn.disabled=false; btn.textContent=lbl;
+    renderReport(); setTimeout(()=>window.print(),80);
+  });
 })();
 
 /* ============================================================
