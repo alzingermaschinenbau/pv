@@ -198,7 +198,16 @@
     #reportArea,#reportArea *{visibility:visible!important}
     #reportArea{position:absolute;left:0;top:0;width:100%;margin:0!important}
     .appbar,.tabbar{display:none!important}
+    /* String-Genaubericht im PDF immer aufgeklappt, Button raus */
+    .rep-strbody{display:block!important}
+    #repStrToggle{display:none!important}
   }
+  /* String-Genaubericht: aufklappbar (Bildschirm kurz, PDF vollständig) */
+  .rep-strbtn{width:100%;margin-top:18px;font-family:inherit;font-weight:800;font-size:.9rem;
+    color:var(--brand);background:var(--brand-soft);border:1px solid var(--brand-soft);border-radius:10px;
+    padding:12px 16px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:9px}
+  .rep-strbtn small{font-weight:600;color:var(--muted-2);font-size:.72rem;margin-left:auto}
+  .rep-strbody{margin-top:6px}
   /* Wechselrichter · Dach-Draufsicht */
   .wr-sum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);
     border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden;margin-bottom:14px}
@@ -440,11 +449,14 @@
     </div>
     <div class="card">
       <div class="chart-head"><div class="ctitle">Größte Verluste</div></div>
-      <table class="tbl evtbl">
-        <thead><tr><th>Datum</th><th>Anlage</th><th>Zeit</th><th>Dauer</th><th>Verlust</th></tr></thead>
-        <tbody id="hc-rows"></tbody>
-      </table>
-      <p class="finehint">Zeit „09:20–17:55" = minutengenau aus dem Logger-5-Min-Export. „~ Tag" = aus dem Tagesverhältnis beider Anlagen geschätzt (☀ = Sonnenstärke). „möglich" = was die Anlage bei dem Wetter erzeugt hätte.</p>
+      <button id="hcToggle" class="rep-strbtn" type="button" aria-expanded="false" style="margin-top:2px">▸ Verlust-Liste anzeigen <small>größte Verlusttage</small></button>
+      <div id="hcWrap" class="rep-strbody" hidden>
+        <table class="tbl evtbl">
+          <thead><tr><th>Datum</th><th>Anlage</th><th>Zeit</th><th>Dauer</th><th>Verlust</th></tr></thead>
+          <tbody id="hc-rows"></tbody>
+        </table>
+        <p class="finehint">Zeit „09:20–17:55" = minutengenau aus dem Logger-5-Min-Export. „~ Tag" = aus dem Tagesverhältnis beider Anlagen geschätzt (☀ = Sonnenstärke). „möglich" = was die Anlage bei dem Wetter erzeugt hätte.</p>
+      </div>
     </div>
   </div>
 
@@ -500,7 +512,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v49</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v51</span></p>
 
 </main>
 
@@ -1467,6 +1479,11 @@ async function openStrings(pl, wr){
     openStrings(t.getAttribute('data-pl'), +t.getAttribute('data-wr')); });
 })();
 
+/* „Größte Verluste"-Liste ein-/ausklappen (hält die App kurz) */
+(function(){ const b=document.getElementById('hcToggle'), w=document.getElementById('hcWrap'); if(!b||!w) return;
+  b.addEventListener('click',()=>{ const open=w.hidden; w.hidden=!open; b.setAttribute('aria-expanded',open);
+    b.innerHTML=(open?'▾ Verlust-Liste ausblenden':'▸ Verlust-Liste anzeigen')+' <small>größte Verlusttage</small>'; }); })();
+
 /* Energie-Filter: Tage / Monate / Jahre umschalten */
 document.querySelectorAll('#energyToggle button').forEach(b=>b.addEventListener('click',()=>renderEnergy(b.dataset.range)));
 document.querySelectorAll('#loadToggle button').forEach(b=>b.addEventListener('click',()=>renderLoad(b.dataset.range)));
@@ -1539,17 +1556,25 @@ function renderReport(){
   Eigenverbrauch: ${EEG_RULE.eigen.name} (Inbetriebnahme ${EEG_RULE.eigen.inbetriebnahme}).<br>
   Einspeisevergütung Volleinspeiser = Erzeugung × ${nf1.format(tV*100)} ct/kWh. Eigenverbrauch-Einspeisung (6,387 ct) ist standortbedingt erst ab Live-Betrieb tagesgenau und hier nicht enthalten.<br>
   Negativpreis-Stunden aus den Börsenpreisen (DE-LU); leere Zeiträume = noch keine Preisdaten hinterlegt.</p>`;
-  // String-Genaubericht (jeder einzelne PV-String) – asynchron, daher Platzhalter + Nachladen
-  area.innerHTML = h + `<div id="repStrings"><div class="rep-sec">String-Genaubericht je Wechselrichter</div><p class="finehint">String-Aufzeichnung wird geladen …</p></div>`;
-  const cached = (_strRep.key === from+'|'+to) ? _strRep.rows : null;
+  // String-Genaubericht (jeder einzelne PV-String) – aufklappbar; im PDF immer voll dabei.
+  const btnTxt = o => `${o?'▾':'▸'} String-Genaubericht ${o?'ausblenden':'anzeigen'} <small>jeder PV-String einzeln</small>`;
+  area.innerHTML = h
+    + `<button id="repStrToggle" class="rep-strbtn" type="button" aria-expanded="${_strOpen}">${btnTxt(_strOpen)}</button>`
+    + `<div id="repStrBody" class="rep-strbody"${_strOpen?'':' hidden'}><div id="repStrings"><div class="rep-sec">String-Genaubericht je Wechselrichter</div><p class="finehint">String-Aufzeichnung wird geladen …</p></div></div>`;
   const fill = rows => { const sr=document.getElementById('repStrings'); if(sr && _strRep.key===from+'|'+to) sr.innerHTML = buildStringReportHTML(rows, from, to); };
+  const cached = (_strRep.key === from+'|'+to) ? _strRep.rows : null;
   if(cached) fill(cached);
-  else ensureStringReport(from, to).then(rows => { if(rows) fill(rows); });
+  else ensureStringReport(from, to).then(rows => { if(rows) fill(rows); });   // immer laden, damit das PDF sie enthält
+  const tgl = document.getElementById('repStrToggle');
+  tgl.addEventListener('click', () => { _strOpen = !_strOpen;
+    document.getElementById('repStrBody').hidden = !_strOpen;
+    tgl.setAttribute('aria-expanded', _strOpen); tgl.innerHTML = btnTxt(_strOpen); });
 }
 
 /* String-Genaubericht: lädt die Tagesenergie ALLER Strings über den Zeitraum
    und baut je Wechselrichter eine String-genaue Tabelle + Störungs-Übersicht. */
 let _strRep = { key:'', rows:null, loading:false };
+let _strOpen = false;   // String-Genaubericht am Bildschirm eingeklappt (im PDF immer voll)
 async function ensureStringReport(from, to){
   const key = from+'|'+to;
   if(_strRep.key===key && _strRep.rows) return _strRep.rows;
