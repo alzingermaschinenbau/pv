@@ -465,7 +465,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v40</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v41</span></p>
 
 </main>
 
@@ -1187,7 +1187,7 @@ function paint(s,first){
   document.getElementById('pb-voll-fill').style.width=(s.voll.kw/s.voll.kwp*100)+'%';
   document.getElementById('pb-eigen-fill').style.width=(s.eigen.kw/s.eigen.kwp*100)+'%';
   document.getElementById('pb-voll-day').textContent=fmtKWh(s.voll.day);
-  document.getElementById('pb-eigen-day').textContent='heute '+fmtKWh(s.eigen.day);
+  document.getElementById('pb-eigen-day').textContent='erzeugt heute '+fmtKWh(s.eigen.day);
   // Nur der Eigenanteil dieser Anlage: Erzeugung Eigenverbrauch − Werksverbrauch
   // (Überschuss ins Netz bzw. Bezug, wenn das Werk mehr braucht). NICHT die
   // Gesamt-Einspeisung am Netzanschlusspunkt (die enthält den Volleinspeiser).
