@@ -459,7 +459,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v36</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v37</span></p>
 
 </main>
 
@@ -1175,7 +1175,11 @@ function paint(s,first){
   document.getElementById('pb-eigen-fill').style.width=(s.eigen.kw/s.eigen.kwp*100)+'%';
   document.getElementById('pb-voll-day').textContent='heute '+fmtKWh(s.voll.day);
   document.getElementById('pb-eigen-day').textContent='heute '+fmtKWh(s.eigen.day);
-  document.getElementById('pb-eigen-flow').textContent=s.eigen.feed>1?'↑ '+fmtKW(s.eigen.feed)+' kW ins Netz':'↓ '+fmtKW(s.eigen.grid)+' kW aus Netz';
+  // Nur der Eigenanteil dieser Anlage: Erzeugung Eigenverbrauch − Werksverbrauch
+  // (Überschuss ins Netz bzw. Bezug, wenn das Werk mehr braucht). NICHT die
+  // Gesamt-Einspeisung am Netzanschlusspunkt (die enthält den Volleinspeiser).
+  const eNet=(s.eigen.kw||0)-(s.eigen.load||0);
+  document.getElementById('pb-eigen-flow').textContent=eNet>=0?'↑ '+fmtKW(eNet)+' kW ins Netz':'↓ '+fmtKW(-eNet)+' kW aus Netz';
 
   // Bilanz
   document.getElementById('quote').innerHTML=fmtPct(s.eigen.quote);
