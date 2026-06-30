@@ -216,13 +216,20 @@ def poll_plant(key, cfg):
         return None
     try:
         p_sum, t_sum, n_ok = 0.0, 0.0, 0
-        for slave in cfg["inverters"]:
+        inv = []   # Einzelwerte je Wechselrichter (für die Dach-Draufsicht)
+        for i, slave in enumerate(cfg["inverters"]):
             pw, tot = read_inverter(client, slave)
             if pw is not None:
                 p_sum += pw
                 n_ok += 1
             if tot is not None:
                 t_sum += tot
+            # wr = laufende Nummer in der Reihenfolge der inverters-Liste (1..n)
+            inv.append({
+                "wr": i + 1,
+                "power_kw": round(pw, 3) if pw is not None else None,
+                "total_kwh": round(tot, 2) if tot is not None else None,
+            })
         if n_ok == 0:
             print(f"  ! {key}: kein Wechselrichter erreichbar")
             return None
@@ -234,6 +241,7 @@ def poll_plant(key, cfg):
             "load_kw": None,
             "feed_kw": None,
             "grid_kw": None,
+            "_inv": inv,   # wird vor dem pv_live-Upsert wieder entfernt
         }
 
         if cfg["meter"] is not None:
@@ -288,6 +296,24 @@ def write_supabase(rows, ts_iso, with_samples=True):
         )
         if not r2.ok:
             print(f"  ! pv_samples {r2.status_code}: {r2.text[:200]}")
+
+
+def write_inverters(inv_rows, ts_iso):
+    """Upsert je Wechselrichter nach pv_inverter (aktueller Stand pro plant+wr)."""
+    if not inv_rows:
+        return
+    payload = [{**r, "ts": ts_iso} for r in inv_rows]
+    try:
+        r = requests.post(
+            f"{SUPABASE_URL}/rest/v1/pv_inverter",
+            headers={**_headers(), "Prefer": "resolution=merge-duplicates"},
+            params={"on_conflict": "plant,wr"},
+            json=payload, timeout=15,
+        )
+        if not r.ok:
+            print(f"  ! pv_inverter {r.status_code}: {r.text[:200]}")
+    except Exception as e:                           # noqa: BLE001
+        print(f"  ! pv_inverter-Schreibfehler: {e}")
 
 
 def fetch_and_store_spot():
@@ -357,7 +383,10 @@ def main():
         total_pv = sum(r["p_kw"] for _, r in collected)
 
         rows = []
+        inv_all = []
         for cfg, row in collected:
+            for d in row.pop("_inv", []):
+                inv_all.append({"plant": row["plant"], **d})
             if "_grid_signed" in row:
                 g = row.pop("_grid_signed")
                 if g is not None:
@@ -378,6 +407,7 @@ def main():
             do_sample = (t0 - last_sample) >= SAMPLE_SECONDS
             try:
                 write_supabase(rows, ts_iso, with_samples=do_sample)
+                write_inverters(inv_all, ts_iso)   # Einzel-WR für die Dach-Ansicht
                 if do_sample:
                     last_sample = t0
             except Exception as e:               # noqa: BLE001

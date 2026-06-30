@@ -188,6 +188,16 @@
     #reportArea{position:absolute;left:0;top:0;width:100%;margin:0!important}
     .appbar,.tabbar{display:none!important}
   }
+  /* Wechselrichter · Dach-Draufsicht */
+  .wr-sum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);
+    border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden;margin-bottom:14px}
+  .wr-sum>div{background:var(--card);padding:11px 14px;min-width:0}
+  .wr-sum .wk{color:var(--muted);font-weight:600;font-size:.74rem}
+  .wr-sum .wv{font-weight:800;font-size:1.15rem;font-variant-numeric:tabular-nums;margin-top:2px}
+  .wr-roof{width:100%;border-radius:var(--r-sm);overflow:hidden;background:#EEF1F4;border:1px solid var(--line)}
+  .wr-roof svg{display:block;width:100%;height:auto}
+  .wr-legend{display:flex;align-items:center;gap:16px;margin-top:11px;font-size:.78rem;font-weight:600;color:var(--muted);flex-wrap:wrap}
+  .wr-legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
 </style>
 </head>
 <body>
@@ -307,6 +317,24 @@
     <p class="finehint">Volleinspeiser: gesamte Erzeugung × 9,289 ct. Eigenverbrauch: nur die eingespeiste Energie (Erzeugung − Stromverbrauch) × 6,387 ct. Monat/Jahr für Eigenverbrauch sind Näherungswerte aus den Tagesdaten.</p>
   </div>
 
+  <!-- Wechselrichter · Dach-Draufsicht -->
+  <div class="erow" id="sec-dach"><span class="eyebrow">Wechselrichter · Dach</span><span class="chint">Draufsicht · Live je WR</span></div>
+  <div class="card">
+    <div class="wr-sum">
+      <div><div class="wk">Gesamt</div><div class="wv" id="wr-tot">–</div></div>
+      <div><div class="wk">Ø Auslastung</div><div class="wv" id="wr-avg" style="color:var(--green)">–</div></div>
+      <div><div class="wk">schwächster WR</div><div class="wv" id="wr-min" style="color:var(--gold);font-size:1rem">–</div></div>
+    </div>
+    <div id="wrRoof" class="wr-roof"></div>
+    <div class="wr-legend">
+      <span><i style="background:var(--green)"></i>gut</span>
+      <span><i style="background:var(--gold)"></i>mittel</span>
+      <span><i style="background:#c2cbd8"></i>wenig / aus</span>
+      <span class="chint" style="margin-left:auto">Norden oben · Sonne aus Osten (rechts)</span>
+    </div>
+    <p class="finehint">Jede Fläche ist der echte Wechselrichter-Bereich laut Belegungsplan. Farbe &amp; kW kommen live aus der Anlage – morgens liefern die Ostflächen (rechts) zuerst. Auslastung bezogen auf die Nennleistung je WR.</p>
+  </div>
+
   <!-- Börsenstrompreis -->
   <div class="erow" id="sec-boerse"><span class="eyebrow">Börsenstrompreis</span><span class="chint">EPEX DE-LU · heute &amp; morgen · 15-Min</span></div>
   <div class="card">
@@ -421,7 +449,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v29</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v30</span></p>
 
 </main>
 
@@ -431,6 +459,7 @@
     <button class="tab" data-target="sec-verlauf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 3 5-8 4 5"/></svg>Verlauf</button>
     <button class="tab" data-target="sec-boerse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>Börse</button>
     <button class="tab" data-target="sec-anlagen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Anlagen</button>
+    <button class="tab" data-target="sec-dach"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M6 9.5V19h12V9.5"/><path d="M10 19v-6h4v6"/></svg>Dach</button>
     <button class="tab" data-target="sec-mehr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>Mehr</button>
   </div>
 </nav>
@@ -448,7 +477,13 @@ const CONFIG = {
     eigen: { name:'Eigenverbrauch', kwp:335, stationCode:'NE=YYYYYY' },
   },
   // Einspeisevergütung €/kWh – Volleinspeiser: gesamte Erzeugung, Eigenverbrauch: nur Einspeisung
-  feedTariff: { voll: 0.09289, eigen: 0.06387 }
+  feedTariff: { voll: 0.09289, eigen: 0.06387 },
+  // Nenn-Leistung je Wechselrichter (kW) für die Auslastungs-Farbe der Dach-Draufsicht.
+  // Reihenfolge = WR 1..n wie im Collector. Werte sind Richtwerte, jederzeit anpassbar.
+  invNominal: {
+    voll:  [62,62,62,62,62,62,62,62,55,55],   // 10 WR
+    eigen: [50,50,50,50,40,40],               // 6 WR
+  }
 };
 
 /* EEG-Negativpreisregel je Anlage – Schwelle hängt vom Inbetriebnahmedatum ab */
@@ -498,6 +533,21 @@ function curtail30(){const t=new Date();const s=[
   {d:26,from:'15:00',dur:1.0,grund:'aus',plant:'Volleinspeiser',kwh:null}];
   return s.map(e=>{const date=new Date(t);date.setDate(t.getDate()-(29-e.d));return {date,from:e.from,dur:e.dur,grund:e.grund,plant:e.plant,kwh:e.kwh};});}
 
+/* Wechselrichter-Werte: Gesamtleistung gleichmäßig nach Nennleistung aufteilen
+   (Fallback, solange pv_inverter noch keine Einzelwerte liefert). */
+function invSplit(plantKw, nomArr){
+  const sum=nomArr.reduce((a,b)=>a+b,0)||1;
+  return nomArr.map((nom,i)=>({wr:i+1, nom, kw:Math.max(0, plantKw*nom/sum)}));
+}
+/* Demo-Einzelwerte je WR – mit etwas Streuung und je einer schwachen Anlage. */
+function invDemo(plantKw, nomArr, key){
+  const arr=invSplit(plantKw, nomArr);
+  arr.forEach(o=>{ o.kw*=0.9+0.2*rnd(); });
+  if(key==='voll'  && arr[3]) arr[3].kw*=0.18;   // WR4 abgeregelt
+  if(key==='eigen' && arr[5]) arr[5].kw*=0.55;   // WR6 schwächer
+  return arr;
+}
+
 /* ============================================================
    DATENSCHICHT
    ============================================================ */
@@ -531,6 +581,7 @@ const Demo={
             labels48:Array.from({length:2*N},(_,k)=>{const m=(k%N)*STEP;return (k>=N?'+1 ':'')+String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}),
             feed48:feedTot.concat(new Array(N).fill(null)),
             now:spotC[i],avg:spAvg,min:spMin,max:spMax,negHours:negH,negFeedKwh:negFeed,rule:EEG_RULE.voll.name},
+      inv:{voll:invDemo(vollKw,CONFIG.invNominal.voll,'voll'), eigen:invDemo(pvKw,CONFIG.invNominal.eigen,'eigen')},
       curtail:curtail30(),
       histCurtail:[
         {date:new Date('2026-06-08T12:00:00'),plantKey:'voll',plant:'Volleinspeiser',actual:659,expected:3427,lost:2768,sun:100,dauer:8.7,von:'09:20',bis:'17:55',quelle:'5min'},
@@ -567,6 +618,15 @@ const Supa = {
     const v = L.voll || {}, e = L.eigen || {};
     // Neuester Zeitstempel der Live-Daten (für die Offline-Erkennung)
     const liveTs = [v.ts, e.ts].filter(Boolean).sort().slice(-1)[0] || null;
+
+    // Einzel-Wechselrichter (Dach-Draufsicht). Fehlt die Tabelle, wird unten
+    // die Gesamtleistung gleichmäßig aufgeteilt – die Ansicht funktioniert trotzdem.
+    const invRows = await this._q('pv_inverter?select=plant,wr,power_kw,total_kwh').catch(() => []);
+    const invBuild = (key, nomArr) => {
+      const rows = (invRows || []).filter(r => r.plant === key).sort((a,b) => a.wr - b.wr);
+      if(rows.length) return rows.map(r => ({ wr: r.wr, nom: nomArr[r.wr-1] || nomArr[0] || 60, kw: Math.max(0, r.power_kw || 0) }));
+      return invSplit(key === 'voll' ? (v.p_kw || 0) : (e.p_kw || 0), nomArr);
+    };
 
     // 2) Heutige 15-Minuten-Kurve (max. 96 Punkte je Anlage)
     const today = await this._q('pv_today?select=plant,slot,p_kw,load_kw,feed_kw,grid_kw').catch(() => []);
@@ -715,6 +775,7 @@ const Supa = {
                selfKwh, feedKwh: eigenFeedKwh, gridKwh, loadDay: loadDayE, loadMonth: loadMon, loadYear: loadYr,
                quote: eigenDay > 0 ? selfKwh / eigenDay * 100 : 0, autarkie: loadDay > 0 ? Math.min(100, selfKwh / loadDay * 100) : 0 },
       curve: { labels, voll: vollC, eigen: eigenC, load: loadC, nowIdx },
+      inv: { voll: invBuild('voll', CONFIG.invNominal.voll), eigen: invBuild('eigen', CONFIG.invNominal.eigen) },
       daily: dailyArr,
       dailyAll,
       monthly: monthlyArr,
@@ -959,8 +1020,86 @@ function headline(s){const tot=s.voll.kw+s.eigen.kw, peak=s.voll.kwp+s.eigen.kwp
   if(tot>=peak*0.4) return 'Beide Anlagen <span class="r">speisen ein</span>.';
   return 'Aktuell <span class="r">'+fmtKW(tot)+'&nbsp;kW</span> Erzeugung.';}
 
+/* ============================================================
+   WECHSELRICHTER · DACH-DRAUFSICHT (Norden oben, Osten rechts)
+   Hallen liegen quer: First Ost-West, Norddach oben / Süddach unten.
+   ============================================================ */
+/* Echte Anordnung laut Luftbild/Plan (Norden oben, Osten rechts):
+   Volleinspeiser Haupthalle  – Nord W→O 7·8·6·5, Süd W→O 4·3·2·1
+   Volleinspeiser Halle West  – WR10 (West) · WR9 (Ost)
+   Eigenverbrauch             – West 1·2, Osthalle Nord 5·6, Süd 3·4 */
+const WR_SITE = [
+  { label:'Volleinspeiser · Haupthalle', plant:'voll', accent:'#CB2A24', capX:20, capY:44,
+    sky:[[80,170,64,14],[176,170,64,14],[272,170,64,14],[368,170,64,14],[464,170,64,14],[556,170,64,14]],
+    zones:[
+      {wr:7,x:60,y:58,w:138,h:108},{wr:8,x:206,y:58,w:138,h:108},{wr:6,x:352,y:58,w:138,h:108},{wr:5,x:498,y:58,w:138,h:108},
+      {wr:4,x:60,y:190,w:138,h:108},{wr:3,x:206,y:190,w:138,h:108},{wr:2,x:352,y:190,w:138,h:108},{wr:1,x:498,y:190,w:138,h:108},
+    ] },
+  { label:'Volleinspeiser · West', plant:'voll', accent:'#CB2A24', capX:20, capY:360,
+    zones:[ {wr:10,x:20,y:374,w:86,h:158},{wr:9,x:110,y:374,w:86,h:158} ] },
+  { label:'Eigenverbrauch', plant:'eigen', accent:'#C8881F', capX:222, capY:360,
+    sky:[[400,450,64,10],[486,450,64,10],[300,450,40,10]],
+    zones:[
+      {wr:1,x:222,y:374,w:80,h:158},{wr:2,x:306,y:374,w:80,h:158},
+      {wr:5,x:392,y:374,w:122,h:74},{wr:6,x:518,y:374,w:120,h:74},
+      {wr:3,x:392,y:456,w:122,h:76},{wr:4,x:518,y:456,w:120,h:76},
+    ] },
+];
+function wrColor(fr){
+  fr=Math.max(0,Math.min(1.15,fr));
+  let vivid; let g=false;
+  if(fr>=0.6){ vivid=[47,169,104]; g=true; }      // grün
+  else if(fr>=0.3){ vivid=[200,136,31]; }          // gold
+  else { vivid=[150,163,180]; }                    // grau (wenig/aus)
+  const p=[238,241,244], t=Math.min(1,fr*1.18);
+  const f=vivid.map((c,i)=>Math.round(p[i]+(c-p[i])*t));
+  return { fill:`rgb(${f[0]},${f[1]},${f[2]})`, text:(g&&fr>=0.62)?'#fff':'#181A1D' };
+}
+function wrZone(z,kw,nom){
+  const fr=nom>0?kw/nom:0, c=wrColor(fr), cx=z.x+z.w/2, cy=z.y+z.h/2;
+  return `<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="7" fill="${c.fill}" stroke="rgba(24,26,29,.22)" stroke-width="1.3"/>`
+    + `<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="7" fill="url(#roofmods)"/>`
+    + `<text x="${cx}" y="${cy-3}" text-anchor="middle" font-weight="800" font-size="15" fill="${c.text}">WR ${z.wr}</text>`
+    + `<text x="${cx}" y="${cy+15}" text-anchor="middle" font-weight="700" font-size="13.5" fill="${c.text}" opacity=".92">${fmtKW(kw)} kW</text>`;
+}
+function wrSky(x,y,w,h){ return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="#e2e8ef" stroke="#cdd5df" stroke-width="1"/>`; }
+function renderInverters(s){
+  const host=document.getElementById('wrRoof'); if(!host||!s.inv) return;
+  const find=(pl,wr)=>(s.inv[pl]||[]).find(x=>x.wr===wr);
+  const nomFor=(pl,wr)=>{ const o=find(pl,wr); return (o&&o.nom)?o.nom:((CONFIG.invNominal[pl]||[])[wr-1]||60); };
+  const kwFor =(pl,wr)=>{ const o=find(pl,wr); return o?o.kw:0; };
+  let g='';
+  WR_SITE.forEach(b=>{
+    (b.sky||[]).forEach(k=>g+=wrSky(k[0],k[1],k[2],k[3]));
+    g+=`<rect x="${b.capX}" y="${b.capY-11}" width="4" height="13" rx="1.5" fill="${b.accent}"/>`
+      +`<text x="${b.capX+10}" y="${b.capY}" font-size="13" font-weight="700" fill="#737880">${b.label}</text>`;
+    b.zones.forEach(z=>{ g+=wrZone(z, kwFor(b.plant,z.wr), nomFor(b.plant,z.wr)); });
+  });
+  host.innerHTML =
+    `<svg viewBox="0 0 660 560" xmlns="http://www.w3.org/2000/svg" font-family="Manrope,sans-serif">`
+    + `<defs><pattern id="roofmods" width="13" height="13" patternUnits="userSpaceOnUse">`
+    + `<path d="M13 0V13M0 13H13" stroke="rgba(20,26,34,.13)" stroke-width="1"/></pattern>`
+    + `<radialGradient id="sunG"><stop offset="0%" stop-color="rgba(255,196,84,.85)"/><stop offset="100%" stop-color="rgba(255,196,84,0)"/></radialGradient></defs>`
+    + `<circle cx="636" cy="20" r="48" fill="url(#sunG)"/><circle cx="636" cy="20" r="10" fill="#F7B733"/>`
+    + `<text x="330" y="13" text-anchor="middle" font-size="12" font-weight="700" fill="#9AA0A6">N</text>`
+    + `<text x="330" y="556" text-anchor="middle" font-size="12" font-weight="700" fill="#9AA0A6">S</text>`
+    + `<text x="8" y="300" font-size="12" font-weight="700" fill="#9AA0A6">W</text>`
+    + `<text x="652" y="300" text-anchor="end" font-size="12" font-weight="700" fill="#9AA0A6">O</text>`
+    + g + `</svg>`;
+  // Kopfzeile: Gesamt / Ø Auslastung / schwächster WR (über alle 16)
+  const all=[...(s.inv.voll||[]).map(o=>({...o,pl:'voll'})),...(s.inv.eigen||[]).map(o=>({...o,pl:'eigen'}))];
+  if(!all.length) return;
+  const tot=all.reduce((a,o)=>a+o.kw,0);
+  const fr=o=>o.nom>0?o.kw/o.nom:0;
+  const avg=all.reduce((a,o)=>a+fr(o),0)/all.length*100;
+  const weak=all.reduce((m,o)=>fr(o)<fr(m)?o:m, all[0]);
+  document.getElementById('wr-tot').textContent=fmtKW(tot)+' kW';
+  document.getElementById('wr-avg').textContent=nf0.format(avg)+' %';
+  document.getElementById('wr-min').textContent=`${weak.pl==='voll'?'V':'E'}·WR${weak.wr} · ${nf0.format(fr(weak)*100)}%`;
+}
+
 function paint(s,first){
-  lastSnap=s; renderEnergy(energyRange); if(cLoad) renderLoad(loadRange);
+  lastSnap=s; renderEnergy(energyRange); if(cLoad) renderLoad(loadRange); renderInverters(s);
   if(cDay) updateDayReadout(cDay.$scrubIdx!=null?cDay.$scrubIdx:(s.curve?s.curve.nowIdx:0));
   const total=s.voll.kw+s.eigen.kw, peak=s.voll.kwp+s.eigen.kwp;
   const h=s.now.getHours()+s.now.getMinutes()/60;
