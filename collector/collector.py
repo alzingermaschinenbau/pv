@@ -201,6 +201,30 @@ def read_inverter(client, slave):
     return power_kw, total_kwh
 
 
+def _s16(v):
+    """16-Bit signed."""
+    return v - 0x10000 if v >= 0x8000 else v
+
+
+# PV-Eingaenge (MPP-Tracker / Strings): ab 32016 paarweise Spannung (Gain 10) /
+# Strom (Gain 100). Huawei SUN2000: bis zu 8 Eingaenge (4 MPPT x 2 Strings).
+REG_WR_STRINGS = 32016
+N_STRINGS = 8
+
+
+def read_strings(client, slave):
+    """Liefert je PV-Eingang {pv, v, a, w} oder None. Leistung w = V * A."""
+    regs = _read_regs(client, slave, REG_WR_STRINGS, N_STRINGS * 2)
+    if not regs or len(regs) < N_STRINGS * 2:
+        return None
+    out = []
+    for k in range(N_STRINGS):
+        v = _s16(regs[2 * k]) / 10.0
+        a = _s16(regs[2 * k + 1]) / 100.0
+        out.append({"pv": k + 1, "v": round(v, 1), "a": round(a, 2), "w": round(v * a)})
+    return out
+
+
 def read_meter(client, slave):
     """Zähler-Wirkleistung in kW (signiert: >0 Bezug, <0 Einspeisung)."""
     w = _to_i32(_read_regs(client, slave, REG_METER_PWR, 2))
@@ -229,6 +253,7 @@ def poll_plant(key, cfg):
                 "wr": i + 1,
                 "power_kw": round(pw, 3) if pw is not None else None,
                 "total_kwh": round(tot, 2) if tot is not None else None,
+                "strings": read_strings(client, slave),   # PV-Eingaenge einzeln
             })
         if n_ok == 0:
             print(f"  ! {key}: kein Wechselrichter erreichbar")

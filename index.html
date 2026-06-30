@@ -212,6 +212,26 @@
   .wr-grad{display:inline-block;height:12px;width:140px;border-radius:6px;border:1px solid var(--line);
     background:linear-gradient(90deg,#b9c2cf 0%,#d6453d 12%,#e08a2a 35%,#e8c331 55%,#7fbf3f 78%,#1ea65a 100%)}
   .wr-gradlbl{font-size:.72rem;color:var(--muted-2);font-weight:700}
+  /* String-Aufklappung (PV-Eingänge je WR) */
+  .wr-strings{margin-top:12px}
+  .wrs-hint{font-size:.8rem;color:var(--muted-2);font-weight:600;text-align:center;padding:8px;
+    border:1px dashed var(--line);border-radius:var(--r-sm)}
+  .wrs-card{border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden}
+  .wrs-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 13px;
+    background:#f7f7f8;font-weight:800}
+  .wrs-head small{font-weight:700;color:var(--muted);font-size:.74rem}
+  .wrs-empty{padding:12px 13px;font-size:.8rem;color:var(--muted);font-weight:600}
+  .wrs-row{display:grid;grid-template-columns:78px 1fr auto;gap:11px;align-items:center;
+    padding:8px 13px;border-top:1px solid var(--line)}
+  .wrs-row .pv{font-weight:800;font-size:.84rem;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .wrs-bar{height:9px;border-radius:5px;background:#eef0f3;overflow:hidden}
+  .wrs-bar i{display:block;height:100%;border-radius:5px}
+  .wrs-row .val{font-weight:800;font-variant-numeric:tabular-nums;text-align:right;font-size:.9rem}
+  .wrs-row .val small{font-weight:600;color:var(--muted);font-size:.62rem}
+  .wrs-row .sub{color:var(--muted-2);font-weight:600;font-size:.68rem;margin-top:1px}
+  .wrs-flag{font-size:.64rem;font-weight:800;padding:1px 7px;border-radius:999px}
+  .wrs-flag.bad{background:var(--brand-soft);color:var(--brand)}
+  .wrs-flag.warn{background:#FBF0DD;color:#9a6a12}
 </style>
 </head>
 <body>
@@ -340,6 +360,7 @@
       <div><div class="wk">schwächster WR</div><div class="wv" id="wr-min" style="color:var(--gold);font-size:1rem">–</div></div>
     </div>
     <div id="wrRoof" class="wr-roof"></div>
+    <div id="wrStrings" class="wr-strings"><div class="wrs-hint">Wechselrichter antippen → einzelne Strings (PV-Eingänge)</div></div>
     <div class="wr-legend">
       <span>Auslastung</span>
       <span class="wr-gradlbl">0&nbsp;%</span>
@@ -464,7 +485,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v43</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v44</span></p>
 
 </main>
 
@@ -554,12 +575,21 @@ function invSplit(plantKw, nomArr){
   const sum=nomArr.reduce((a,b)=>a+b,0)||1;
   return nomArr.map((nom,i)=>({wr:i+1, nom, kw:Math.max(0, plantKw*nom/sum)}));
 }
+/* Demo-Strings (PV-Eingänge) je WR – 7 Strings, mit je einer Auffälligkeit. */
+function invDemoStrings(kw, key, wr){
+  const n=7, wtot=Math.max(0,kw)*1000, out=[];
+  for(let p=1;p<=n;p++){ out.push(wtot/n*(0.85+0.3*rnd())); }
+  if(key==='voll' && wr===2) out[0]=-400;   // rückspeisender String
+  if(key==='voll' && wr===5) out[4]=600;     // schwacher String
+  return out.map((w,i)=>{ const v=640+rnd()*45; return { pv:i+1, v:+v.toFixed(1), a:+(w/v).toFixed(2), w:Math.round(w) }; });
+}
 /* Demo-Einzelwerte je WR – mit etwas Streuung und je einer schwachen Anlage. */
 function invDemo(plantKw, nomArr, key){
   const arr=invSplit(plantKw, nomArr);
   arr.forEach(o=>{ o.kw*=0.9+0.2*rnd(); });
   if(key==='voll'  && arr[3]) arr[3].kw*=0.18;   // WR4 abgeregelt
   if(key==='eigen' && arr[5]) arr[5].kw*=0.55;   // WR6 schwächer
+  arr.forEach(o=>{ o.strings=invDemoStrings(o.kw, key, o.wr); });
   return arr;
 }
 
@@ -636,10 +666,10 @@ const Supa = {
 
     // Einzel-Wechselrichter (Dach-Draufsicht). Fehlt die Tabelle, wird unten
     // die Gesamtleistung gleichmäßig aufgeteilt – die Ansicht funktioniert trotzdem.
-    const invRows = await this._q('pv_inverter?select=plant,wr,power_kw,total_kwh').catch(() => []);
+    const invRows = await this._q('pv_inverter?select=plant,wr,power_kw,total_kwh,strings').catch(() => []);
     const invBuild = (key, nomArr) => {
       const rows = (invRows || []).filter(r => r.plant === key).sort((a,b) => a.wr - b.wr);
-      if(rows.length) return rows.map(r => ({ wr: r.wr, nom: nomArr[r.wr-1] || nomArr[0] || 60, kw: Math.max(0, r.power_kw || 0) }));
+      if(rows.length) return rows.map(r => ({ wr: r.wr, nom: nomArr[r.wr-1] || nomArr[0] || 60, kw: Math.max(0, r.power_kw || 0), strings: r.strings || null }));
       return invSplit(key === 'voll' ? (v.p_kw || 0) : (e.p_kw || 0), nomArr);
     };
 
@@ -1081,7 +1111,7 @@ function wrColor(fr){
   const lum=0.299*c[0]+0.587*c[1]+0.114*c[2];   // Textfarbe nach Helligkeit
   return { fill:`rgb(${c[0]},${c[1]},${c[2]})`, text: lum<150 ? '#fff' : '#181A1D' };
 }
-function wrZone(z,kw,nom){
+function wrZone(z,kw,nom,plant){
   const fr=nom>0?kw/nom:0, c=wrColor(fr), cx=z.x+z.w/2, cy=z.y+z.h/2;
   let txt;
   if(z.h<52){   // länglicher Streifen: eine Zeile – Label links, kW rechts
@@ -1092,7 +1122,8 @@ function wrZone(z,kw,nom){
       + `<text x="${cx}" y="${cy+15}" text-anchor="middle" font-weight="700" font-size="13.5" fill="${c.text}" opacity=".92">${nf1.format(kw)} kW</text>`;
   }
   return `<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="7" fill="${c.fill}" stroke="rgba(24,26,29,.22)" stroke-width="1.3"/>`
-    + `<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="7" fill="url(#roofmods)"/>` + txt;
+    + `<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="7" fill="url(#roofmods)"/>` + txt
+    + `<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="7" fill="transparent" class="wrhit" data-pl="${plant}" data-wr="${z.wr}" style="cursor:pointer"></rect>`;
 }
 function wrSky(x,y,w,h){ return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="#e2e8ef" stroke="#cdd5df" stroke-width="1"/>`; }
 /* Echter Sonnenstand (Azimut + Höhe) für Schierling: 48,82° N / 12,15° O.
@@ -1131,7 +1162,7 @@ function renderInverters(s){
     (b.sky||[]).forEach(k=>g+=wrSky(k[0],k[1],k[2],k[3]));
     g+=`<rect x="${b.capX}" y="${b.capY-11}" width="4" height="13" rx="1.5" fill="${b.accent}"/>`
       +`<text x="${b.capX+10}" y="${b.capY}" font-size="13" font-weight="700" fill="#737880">${b.label}</text>`;
-    b.zones.forEach(z=>{ g+=wrZone(z, kwFor(b.plant,z.wr), nomFor(b.plant,z.wr)); });
+    b.zones.forEach(z=>{ g+=wrZone(z, kwFor(b.plant,z.wr), nomFor(b.plant,z.wr), b.plant); });
   });
   const sp=wrSunPos(s.now);
   const sun = sp.visible
@@ -1158,6 +1189,38 @@ function renderInverters(s){
   document.getElementById('wr-tot').textContent=fmtKW(tot)+' kW';
   document.getElementById('wr-avg').textContent=nf0.format(avg)+' %';
   document.getElementById('wr-min').textContent=`${weak.pl==='voll'?'V':'E'}·WR${weak.wr} · ${nf0.format(fr(weak)*100)}%`;
+  if(wrSel) renderStrings(wrSel.pl, wrSel.wr);   // offenes String-Panel live aktualisieren
+}
+
+/* String-Aufklappung: zeigt die einzelnen PV-Eingänge eines Wechselrichters */
+let wrSel=null;
+function renderStrings(pl, wr){
+  const host=document.getElementById('wrStrings'); if(!host) return;
+  wrSel={pl, wr};
+  const plantName = pl==='voll'?'Volleinspeiser':'Eigenverbrauch';
+  const o=(lastSnap&&lastSnap.inv&&(lastSnap.inv[pl]||[]).find(x=>x.wr===wr))||null;
+  if(!o || !o.strings || !o.strings.length){
+    host.innerHTML=`<div class="wrs-card"><div class="wrs-head"><span>${plantName} · WR ${wr}</span><small>keine String-Daten</small></div>`
+      +`<div class="wrs-empty">Einzel-Strings erscheinen, sobald der aktualisierte Collector läuft und die Spalte <b>strings</b> in Supabase angelegt ist.</div></div>`;
+    return;
+  }
+  const list=o.strings.filter(s=>Math.abs(s.a)>0.05);
+  const show=list.length?list:o.strings;
+  const maxW=Math.max(1,...show.map(s=>Math.abs(s.w)));
+  const pos=show.map(s=>s.w).filter(w=>w>0).sort((a,b)=>a-b);
+  const med=pos.length?pos[Math.floor(pos.length/2)]:0;
+  let rows='';
+  show.forEach(s=>{
+    let col='var(--green)', flag='';
+    if(s.a<-0.05){ col='var(--brand)'; flag='<span class="wrs-flag bad">rückspeisend</span>'; }
+    else if(med>0 && s.w<med*0.5){ col='var(--gold)'; flag='<span class="wrs-flag warn">schwach</span>'; }
+    const wpct=Math.max(2,Math.min(100,Math.abs(s.w)/maxW*100));
+    rows+=`<div class="wrs-row"><span class="pv">PV${s.pv}${flag}</span>`
+      +`<span class="wrs-bar"><i style="width:${wpct}%;background:${col}"></i></span>`
+      +`<span class="val">${nf0.format(s.w)}<small> W</small><div class="sub">${nf1.format(s.v)} V · ${nf1.format(s.a)} A</div></span></div>`;
+  });
+  const sum=show.reduce((a,s)=>a+s.w,0);
+  host.innerHTML=`<div class="wrs-card"><div class="wrs-head"><span>${plantName} · WR ${wr}</span><small>${show.length} Strings · ${nf0.format(sum)} W</small></div>${rows}</div>`;
 }
 
 function paint(s,first){
@@ -1289,6 +1352,11 @@ document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');
   const el=document.getElementById(t.dataset.target);if(el)window.scrollTo({top:el.getBoundingClientRect().top+window.scrollY-72,behavior:'smooth'});}));
 document.getElementById('refreshBtn').addEventListener('click',refresh);
+
+/* Dach-Draufsicht: Wechselrichter antippen → Strings aufklappen */
+(function(){ const roof=document.getElementById('wrRoof'); if(!roof) return;
+  roof.addEventListener('click',e=>{ const t=e.target.closest('[data-wr]'); if(!t) return;
+    renderStrings(t.getAttribute('data-pl'), +t.getAttribute('data-wr')); }); })();
 
 /* Energie-Filter: Tage / Monate / Jahre umschalten */
 document.querySelectorAll('#energyToggle button').forEach(b=>b.addEventListener('click',()=>renderEnergy(b.dataset.range)));
