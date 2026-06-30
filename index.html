@@ -212,6 +212,20 @@
   .wr-grad{display:inline-block;height:12px;width:140px;border-radius:6px;border:1px solid var(--line);
     background:linear-gradient(90deg,#b9c2cf 0%,#d6453d 12%,#e08a2a 35%,#e8c331 55%,#7fbf3f 78%,#1ea65a 100%)}
   .wr-gradlbl{font-size:.72rem;color:var(--muted-2);font-weight:700}
+  /* Störungs-Box (auffällige Strings, live) */
+  .wr-faults{margin-bottom:12px}
+  .wr-faults.ok{display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:var(--r-sm);
+    background:#EEF7EE;border:1px solid #CDE6CD;color:#2C7A2C;font-weight:700;font-size:.8rem}
+  .wrf-card{border:1px solid var(--brand-soft);border-radius:var(--r-sm);overflow:hidden;background:var(--brand-soft)}
+  .wrf-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 13px;
+    font-weight:800;color:var(--brand);font-size:.84rem}
+  .wrf-row{display:flex;align-items:center;gap:9px;padding:8px 13px;border-top:1px solid rgba(0,0,0,.06);
+    background:var(--card);cursor:pointer;font-size:.82rem}
+  .wrf-row .wrf-wr{font-weight:800;min-width:78px}
+  .wrf-row .wrf-pv{font-weight:700;color:var(--muted-2)}
+  .wrf-row .wrf-flag{margin-left:auto;font-size:.64rem;font-weight:800;padding:1px 7px;border-radius:999px}
+  .wrf-row .wrf-flag.bad{background:var(--brand);color:#fff}
+  .wrf-row .wrf-flag.warn{background:#F2C94C;color:#5b3d00}
   /* String-Aufklappung (PV-Eingänge je WR) */
   .wr-strings{margin-top:12px}
   .wrs-hint{font-size:.8rem;color:var(--muted-2);font-weight:600;text-align:center;padding:8px;
@@ -359,6 +373,7 @@
       <div><div class="wk">Ø Auslastung</div><div class="wv" id="wr-avg" style="color:var(--green)">–</div></div>
       <div><div class="wk">schwächster WR</div><div class="wv" id="wr-min" style="color:var(--gold);font-size:1rem">–</div></div>
     </div>
+    <div id="wrFaults" class="wr-faults"></div>
     <div id="wrRoof" class="wr-roof"></div>
     <div id="wrStrings" class="wr-strings"><div class="wrs-hint">Wechselrichter antippen → einzelne Strings (PV-Eingänge)</div></div>
     <div class="wr-legend">
@@ -485,7 +500,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v48</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v49</span></p>
 
 </main>
 
@@ -1227,7 +1242,33 @@ function renderInverters(s){
   document.getElementById('wr-tot').textContent=fmtKW(tot)+' kW';
   document.getElementById('wr-avg').textContent=nf0.format(avg)+' %';
   document.getElementById('wr-min').textContent=`${weak.pl==='voll'?'V':'E'}·WR${weak.wr} · ${nf0.format(fr(weak)*100)}%`;
+  renderFaults(s);                               // Störungs-Box oben aktualisieren
   if(wrSel) renderStrings(wrSel.pl, wrSel.wr);   // offenes String-Panel live aktualisieren
+}
+
+/* Störungs-Box: scannt alle Wechselrichter live nach auffälligen Strings
+   (rückspeisend = negativer Strom; schwach = deutlich unter den Nachbarn).
+   Nur produzierende WR werden bewertet – ein abgeschalteter WR ist kein Fehler. */
+function renderFaults(s){
+  const host=document.getElementById('wrFaults'); if(!host||!s.inv) return;
+  const faults=[];
+  ['voll','eigen'].forEach(pl=>{ (s.inv[pl]||[]).forEach(o=>{
+    if(!o.strings || !o.strings.length || (o.kw||0)<0.4) return;   // WR aus → nicht bewerten
+    const pos=o.strings.map(x=>x.w).filter(w=>w>0).sort((a,b)=>a-b);
+    const med=pos.length?pos[Math.floor(pos.length/2)]:0;
+    o.strings.forEach(x=>{
+      if(x.a<-0.05) faults.push({pl,wr:o.wr,pv:x.pv,st:'bad'});
+      else if(med>0 && Math.abs(x.a)>0.05 && x.w<med*0.5) faults.push({pl,wr:o.wr,pv:x.pv,st:'warn'});
+    });
+  }); });
+  if(!faults.length){ host.className='wr-faults ok'; host.innerHTML='✓ Keine Störungen – alle Strings liefern plausibel.'; return; }
+  faults.sort((a,b)=> a.st===b.st?0 : a.st==='bad'?-1:1);
+  const pn=pl=>pl==='voll'?'V':'E';
+  const rows=faults.map(f=>`<div class="wrf-row" data-pl="${f.pl}" data-wr="${f.wr}">`
+    +`<span class="wrf-wr">${pn(f.pl)} · WR ${f.wr}</span><span class="wrf-pv">PV${f.pv}</span>`
+    +`<span class="wrf-flag ${f.st}">${f.st==='bad'?'rückspeisend':'schwach'}</span></div>`).join('');
+  host.className='wr-faults';
+  host.innerHTML=`<div class="wrf-card"><div class="wrf-head"><span>⚠ ${faults.length} Störung${faults.length>1?'en':''} · auffällige Strings</span><span style="font-weight:700;font-size:.72rem;color:var(--muted-2)">antippen für Details</span></div>${rows}</div>`;
 }
 
 /* String-Aufklappung: zeigt die einzelnen PV-Eingänge eines Wechselrichters */
@@ -1413,11 +1454,18 @@ document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
   const el=document.getElementById(t.dataset.target);if(el)window.scrollTo({top:el.getBoundingClientRect().top+window.scrollY-72,behavior:'smooth'});}));
 document.getElementById('refreshBtn').addEventListener('click',refresh);
 
-/* Dach-Draufsicht: Wechselrichter antippen → Strings aufklappen */
-(function(){ const roof=document.getElementById('wrRoof'); if(!roof) return;
-  roof.addEventListener('click',async e=>{ const t=e.target.closest('[data-wr]'); if(!t) return;
-    const pl=t.getAttribute('data-pl'), wr=+t.getAttribute('data-wr');
-    renderStrings(pl, wr); await loadStringDaily(pl, wr); renderStrings(pl, wr); }); })();
+/* Dach-Draufsicht: Wechselrichter (oder Störungs-Eintrag) antippen → Strings aufklappen */
+async function openStrings(pl, wr){
+  renderStrings(pl, wr); await loadStringDaily(pl, wr); renderStrings(pl, wr);
+  const sp=document.getElementById('wrStrings'); if(sp) sp.scrollIntoView({behavior:'smooth', block:'center'});
+}
+(function(){ const roof=document.getElementById('wrRoof'); if(roof)
+  roof.addEventListener('click',e=>{ const t=e.target.closest('[data-wr]'); if(!t) return;
+    openStrings(t.getAttribute('data-pl'), +t.getAttribute('data-wr')); });
+  const fb=document.getElementById('wrFaults'); if(fb)
+  fb.addEventListener('click',e=>{ const t=e.target.closest('[data-wr]'); if(!t) return;
+    openStrings(t.getAttribute('data-pl'), +t.getAttribute('data-wr')); });
+})();
 
 /* Energie-Filter: Tage / Monate / Jahre umschalten */
 document.querySelectorAll('#energyToggle button').forEach(b=>b.addEventListener('click',()=>renderEnergy(b.dataset.range)));
