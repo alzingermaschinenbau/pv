@@ -180,6 +180,12 @@
   .rep-kpi{border:1px solid var(--line);border-radius:10px;padding:10px 12px}
   .rep-kpi .k{color:var(--muted);font-size:.74rem;font-weight:600}
   .rep-kpi .v{font-weight:800;font-size:1.15rem;margin-top:3px}
+  /* Bericht-Tabelle: mobil horizontal scrollbar, Spalten nach Inhalt (kein Überlapp) */
+  .rep-tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -2px}
+  .rep-tblwrap .tbl{table-layout:auto;white-space:nowrap;min-width:100%}
+  .rep-tblwrap .tbl th,.rep-tblwrap .tbl td{padding:9px 12px}
+  .rep-tblwrap .tbl td:first-child,.rep-tblwrap .tbl th:first-child{width:auto;white-space:nowrap}
+  @media print{ .rep-tblwrap{overflow:visible} .rep-tblwrap .tbl{white-space:normal} }
   @media print{
     @page{margin:14mm}
     body{background:#fff!important}
@@ -449,7 +455,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v30</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v31</span></p>
 
 </main>
 
@@ -1288,9 +1294,9 @@ function renderReport(){
     <div class="rep-kpi"><div class="k">Negativpreis-Stunden</div><div class="v">${nf1.format(tot.neg)} <small style="font-weight:600;color:var(--muted)">Std.</small></div></div>
   </div>
   <div class="rep-sec">Ertrag, Abregelung, Negativpreis & Vergütung pro ${gname}</div>
-  <table class="tbl"><thead><tr><th>${gname}</th><th>Voll kWh</th><th>Eigen kWh</th><th>Entgangen</th><th>Neg. Std.</th><th>Verg. €</th></tr></thead><tbody>`;
+  <div class="rep-tblwrap"><table class="tbl"><thead><tr><th>${gname}</th><th>Voll kWh</th><th>Eigen kWh</th><th>Entgangen</th><th>Neg. Std.</th><th>Verg. €</th></tr></thead><tbody>`;
   rows.forEach(r=>{ h+=`<tr><td>${r.label}</td><td>${r0(r.voll)}</td><td>${r0(r.eigen)}</td><td>${r.lost?r0(r.lost):'–'}</td><td>${r.neg?nf1.format(r.neg):'–'}</td><td>${eur(r.voll*tV)}</td></tr>`; });
-  h+=`<tr class="sum"><td>Summe</td><td>${r0(tot.voll)}</td><td>${r0(tot.eigen)}</td><td>${r0(tot.lost)}</td><td>${nf1.format(tot.neg)}</td><td>${eur(tot.voll*tV)}</td></tr></tbody></table>
+  h+=`<tr class="sum"><td>Summe</td><td>${r0(tot.voll)}</td><td>${r0(tot.eigen)}</td><td>${r0(tot.lost)}</td><td>${nf1.format(tot.neg)}</td><td>${eur(tot.voll*tV)}</td></tr></tbody></table></div>
   <div class="rep-sec">EEG-Regelung & Hinweise</div>
   <p class="finehint">Volleinspeiser: ${EEG_RULE.voll.name} (Inbetriebnahme ${EEG_RULE.voll.inbetriebnahme}).<br>
   Eigenverbrauch: ${EEG_RULE.eigen.name} (Inbetriebnahme ${EEG_RULE.eigen.inbetriebnahme}).<br>
