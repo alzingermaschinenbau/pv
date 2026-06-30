@@ -1024,21 +1024,27 @@ function headline(s){const tot=s.voll.kw+s.eigen.kw, peak=s.voll.kwp+s.eigen.kwp
    WECHSELRICHTER · DACH-DRAUFSICHT (Norden oben, Osten rechts)
    Hallen liegen quer: First Ost-West, Norddach oben / Süddach unten.
    ============================================================ */
-const WR_LAYOUT = {
-  voll: [
-    // Halle West (klein, links): WR10 Norddach, WR9 Süddach
-    {wr:10, x:20, y:54, w:130, h:46}, {wr:9, x:20, y:104, w:130, h:48},
-    // Haupthalle Norddach (WR1–4, West→Ost)
-    {wr:1, x:172, y:60, w:112, h:106},{wr:2, x:288, y:60, w:112, h:106},{wr:3, x:404, y:60, w:112, h:106},{wr:4, x:520, y:60, w:112, h:106},
-    // Haupthalle Süddach (WR5–8, West→Ost)
-    {wr:5, x:172, y:190, w:112, h:106},{wr:6, x:288, y:190, w:112, h:106},{wr:7, x:404, y:190, w:112, h:106},{wr:8, x:520, y:190, w:112, h:106},
-  ],
-  eigen: [
-    // lange Halle, Norddach (WR1–3) / Süddach (WR4–6), West→Ost
-    {wr:1, x:20, y:368, w:200, h:70},{wr:2, x:224, y:368, w:202, h:70},{wr:3, x:430, y:368, w:202, h:70},
-    {wr:4, x:20, y:452, w:200, h:70},{wr:5, x:224, y:452, w:202, h:70},{wr:6, x:430, y:452, w:202, h:70},
-  ]
-};
+/* Echte Anordnung laut Luftbild/Plan (Norden oben, Osten rechts):
+   Volleinspeiser Haupthalle  – Nord W→O 7·8·6·5, Süd W→O 4·3·2·1
+   Volleinspeiser Halle West  – WR10 (West) · WR9 (Ost)
+   Eigenverbrauch             – West 1·2, Osthalle Nord 5·6, Süd 3·4 */
+const WR_SITE = [
+  { label:'Volleinspeiser · Haupthalle', plant:'voll', accent:'#CB2A24', capX:20, capY:44,
+    sky:[[80,170,64,14],[176,170,64,14],[272,170,64,14],[368,170,64,14],[464,170,64,14],[556,170,64,14]],
+    zones:[
+      {wr:7,x:60,y:58,w:138,h:108},{wr:8,x:206,y:58,w:138,h:108},{wr:6,x:352,y:58,w:138,h:108},{wr:5,x:498,y:58,w:138,h:108},
+      {wr:4,x:60,y:190,w:138,h:108},{wr:3,x:206,y:190,w:138,h:108},{wr:2,x:352,y:190,w:138,h:108},{wr:1,x:498,y:190,w:138,h:108},
+    ] },
+  { label:'Volleinspeiser · West', plant:'voll', accent:'#CB2A24', capX:20, capY:360,
+    zones:[ {wr:10,x:20,y:374,w:86,h:158},{wr:9,x:110,y:374,w:86,h:158} ] },
+  { label:'Eigenverbrauch', plant:'eigen', accent:'#C8881F', capX:222, capY:360,
+    sky:[[400,450,64,10],[486,450,64,10],[300,450,40,10]],
+    zones:[
+      {wr:1,x:222,y:374,w:80,h:158},{wr:2,x:306,y:374,w:80,h:158},
+      {wr:5,x:392,y:374,w:122,h:74},{wr:6,x:518,y:374,w:120,h:74},
+      {wr:3,x:392,y:456,w:122,h:76},{wr:4,x:518,y:456,w:120,h:76},
+    ] },
+];
 function wrColor(fr){
   fr=Math.max(0,Math.min(1.15,fr));
   let vivid; let g=false;
@@ -1063,21 +1069,22 @@ function renderInverters(s){
   const nomFor=(pl,wr)=>{ const o=find(pl,wr); return (o&&o.nom)?o.nom:((CONFIG.invNominal[pl]||[])[wr-1]||60); };
   const kwFor =(pl,wr)=>{ const o=find(pl,wr); return o?o.kw:0; };
   let g='';
-  for(let i=0;i<7;i++) g+=wrSky(180+i*64, 170, 46, 16);   // First-Oberlichter Haupthalle
-  for(let i=0;i<4;i++) g+=wrSky(122+i*132, 440, 70, 12);  // Oberlichter Eigenverbrauch
-  ['voll','eigen'].forEach(pl=>WR_LAYOUT[pl].forEach(z=>{ g+=wrZone(z, kwFor(pl,z.wr), nomFor(pl,z.wr)); }));
+  WR_SITE.forEach(b=>{
+    (b.sky||[]).forEach(k=>g+=wrSky(k[0],k[1],k[2],k[3]));
+    g+=`<rect x="${b.capX}" y="${b.capY-11}" width="4" height="13" rx="1.5" fill="${b.accent}"/>`
+      +`<text x="${b.capX+10}" y="${b.capY}" font-size="13" font-weight="700" fill="#737880">${b.label}</text>`;
+    b.zones.forEach(z=>{ g+=wrZone(z, kwFor(b.plant,z.wr), nomFor(b.plant,z.wr)); });
+  });
   host.innerHTML =
-    `<svg viewBox="0 0 660 558" xmlns="http://www.w3.org/2000/svg" font-family="Manrope,sans-serif">`
+    `<svg viewBox="0 0 660 560" xmlns="http://www.w3.org/2000/svg" font-family="Manrope,sans-serif">`
     + `<defs><pattern id="roofmods" width="13" height="13" patternUnits="userSpaceOnUse">`
     + `<path d="M13 0V13M0 13H13" stroke="rgba(20,26,34,.13)" stroke-width="1"/></pattern>`
     + `<radialGradient id="sunG"><stop offset="0%" stop-color="rgba(255,196,84,.85)"/><stop offset="100%" stop-color="rgba(255,196,84,0)"/></radialGradient></defs>`
     + `<circle cx="636" cy="20" r="48" fill="url(#sunG)"/><circle cx="636" cy="20" r="10" fill="#F7B733"/>`
     + `<text x="330" y="13" text-anchor="middle" font-size="12" font-weight="700" fill="#9AA0A6">N</text>`
-    + `<text x="330" y="554" text-anchor="middle" font-size="12" font-weight="700" fill="#9AA0A6">S</text>`
+    + `<text x="330" y="556" text-anchor="middle" font-size="12" font-weight="700" fill="#9AA0A6">S</text>`
     + `<text x="8" y="300" font-size="12" font-weight="700" fill="#9AA0A6">W</text>`
     + `<text x="652" y="300" text-anchor="end" font-size="12" font-weight="700" fill="#9AA0A6">O</text>`
-    + `<text x="20" y="44" font-size="13" font-weight="700" fill="#737880">Volleinspeiser</text>`
-    + `<text x="20" y="356" font-size="13" font-weight="700" fill="#737880">Eigenverbrauch</text>`
     + g + `</svg>`;
   // Kopfzeile: Gesamt / Ø Auslastung / schwächster WR (über alle 16)
   const all=[...(s.inv.voll||[]).map(o=>({...o,pl:'voll'})),...(s.inv.eigen||[]).map(o=>({...o,pl:'eigen'}))];
