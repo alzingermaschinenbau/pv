@@ -13,9 +13,12 @@ create table if not exists public.pv_inverter (
   wr         int         not null,                 -- laufende Nummer 1..n (Reihenfolge wie im Collector)
   power_kw   numeric,                              -- aktuelle Wirkleistung in kW
   total_kwh  numeric,                              -- Gesamtertrag (Zählerstand) in kWh
+  strings    jsonb,                                -- PV-Eingaenge einzeln: [{pv,v,a,w}, ...]
   ts         timestamptz not null default now(),   -- Zeitpunkt der Messung
   primary key (plant, wr)
 );
+-- Falls die Tabelle schon existiert (Stufe 1), Spalte nachruesten:
+alter table public.pv_inverter add column if not exists strings jsonb;
 
 -- Nur-Lesen für den anonymen Browser-Key (RLS)
 alter table public.pv_inverter enable row level security;
