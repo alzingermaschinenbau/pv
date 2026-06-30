@@ -485,7 +485,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v45</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v46</span></p>
 
 </main>
 
@@ -1117,17 +1117,22 @@ function wrColor(fr){
   const lum=0.299*c[0]+0.587*c[1]+0.114*c[2];   // Textfarbe nach Helligkeit
   return { fill:`rgb(${c[0]},${c[1]},${c[2]})`, text: lum<150 ? '#fff' : '#181A1D' };
 }
-function wrZone(z,kw,nom,plant){
-  const fr=nom>0?kw/nom:0, c=wrColor(fr), cx=z.x+z.w/2, cy=z.y+z.h/2;
+function wrZone(z,kw,nom,plant,producing){
+  const fr=nom>0?kw/nom:0, cx=z.x+z.w/2, cy=z.y+z.h/2;
+  // Ausfall: 0 Leistung, obwohl die Anlage gerade produziert (tagsüber) → rot + AUS
+  const outage = producing && kw < 0.4;
+  const c = outage ? {fill:'rgb(203,42,36)', text:'#fff'} : wrColor(fr);
+  const valTxt = outage ? 'AUS' : nf1.format(kw)+' kW';
+  const stroke = outage ? 'rgba(168,33,28,.9)' : 'rgba(24,26,29,.22)';
   let txt;
-  if(z.h<52){   // länglicher Streifen: eine Zeile – Label links, kW rechts
+  if(z.h<52){   // länglicher Streifen: eine Zeile – Label links, Wert rechts
     txt=`<text x="${z.x+13}" y="${cy+5}" font-weight="800" font-size="14" fill="${c.text}">WR ${z.wr}</text>`
-      + `<text x="${z.x+z.w-13}" y="${cy+5}" text-anchor="end" font-weight="700" font-size="13.5" fill="${c.text}" opacity=".92">${nf1.format(kw)} kW</text>`;
+      + `<text x="${z.x+z.w-13}" y="${cy+5}" text-anchor="end" font-weight="800" font-size="13.5" fill="${c.text}" opacity=".95">${valTxt}</text>`;
   } else {      // Kachel: zwei Zeilen, zentriert
     txt=`<text x="${cx}" y="${cy-3}" text-anchor="middle" font-weight="800" font-size="15" fill="${c.text}">WR ${z.wr}</text>`
-      + `<text x="${cx}" y="${cy+15}" text-anchor="middle" font-weight="700" font-size="13.5" fill="${c.text}" opacity=".92">${nf1.format(kw)} kW</text>`;
+      + `<text x="${cx}" y="${cy+15}" text-anchor="middle" font-weight="800" font-size="${outage?16:13.5}" fill="${c.text}" opacity=".95">${valTxt}</text>`;
   }
-  return `<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="7" fill="${c.fill}" stroke="rgba(24,26,29,.22)" stroke-width="1.3"/>`
+  return `<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="7" fill="${c.fill}" stroke="${stroke}" stroke-width="${outage?2:1.3}"/>`
     + `<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="7" fill="url(#roofmods)"/>` + txt
     + `<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="7" fill="transparent" class="wrhit" data-pl="${plant}" data-wr="${z.wr}" style="cursor:pointer"></rect>`;
 }
@@ -1163,12 +1168,16 @@ function renderInverters(s){
   const find=(pl,wr)=>(s.inv[pl]||[]).find(x=>x.wr===wr);
   const nomFor=(pl,wr)=>{ const o=find(pl,wr); return (o&&o.nom)?o.nom:((CONFIG.invNominal[pl]||[])[wr-1]||60); };
   const kwFor =(pl,wr)=>{ const o=find(pl,wr); return o?o.kw:0; };
+  // "produziert gerade": Median-Leistung > 3 kW → dann ist ein WR mit 0 kW ein Ausfall (rot)
+  const allKw=[...(s.inv.voll||[]),...(s.inv.eigen||[])].map(o=>o.kw).sort((a,b)=>a-b);
+  const medKw=allKw.length?allKw[Math.floor(allKw.length/2)]:0;
+  const producing=medKw>3;
   let g='';
   WR_SITE.forEach(b=>{
     (b.sky||[]).forEach(k=>g+=wrSky(k[0],k[1],k[2],k[3]));
     g+=`<rect x="${b.capX}" y="${b.capY-11}" width="4" height="13" rx="1.5" fill="${b.accent}"/>`
       +`<text x="${b.capX+10}" y="${b.capY}" font-size="13" font-weight="700" fill="#737880">${b.label}</text>`;
-    b.zones.forEach(z=>{ g+=wrZone(z, kwFor(b.plant,z.wr), nomFor(b.plant,z.wr), b.plant); });
+    b.zones.forEach(z=>{ g+=wrZone(z, kwFor(b.plant,z.wr), nomFor(b.plant,z.wr), b.plant, producing); });
   });
   const sp=wrSunPos(s.now);
   const sun = sp.visible
