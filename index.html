@@ -459,7 +459,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v33</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v34</span></p>
 
 </main>
 
@@ -1105,7 +1105,9 @@ function wrSunPos(now){
   const h=now.getHours()+now.getMinutes()/60;
   if(h<sr||h>ss) return {visible:false};
   const p=(h-sr)/(ss-sr);                                // 0..1 Ost→West
-  return { visible:true, x:620-(620-44)*p, y:44-(44-12)*Math.sin(Math.PI*p) };
+  // Nordhalbkugel: Sonne steht im SÜDEN → Bogen entlang der Unterkante,
+  // mittags am tiefsten (Süd/unten), morgens rechts (Ost), abends links (West).
+  return { visible:true, x:620-(620-44)*p, y:566+34*Math.sin(Math.PI*p) };
 }
 function renderInverters(s){
   const host=document.getElementById('wrRoof'); if(!host||!s.inv) return;
@@ -1124,13 +1126,13 @@ function renderInverters(s){
     ? `<circle cx="${sp.x.toFixed(0)}" cy="${sp.y.toFixed(0)}" r="46" fill="url(#sunG)"/><circle cx="${sp.x.toFixed(0)}" cy="${sp.y.toFixed(0)}" r="10" fill="#F7B733"/>`
     : '';
   host.innerHTML =
-    `<svg viewBox="0 0 660 560" xmlns="http://www.w3.org/2000/svg" font-family="Manrope,sans-serif">`
+    `<svg viewBox="0 0 660 640" xmlns="http://www.w3.org/2000/svg" font-family="Manrope,sans-serif">`
     + `<defs><pattern id="roofmods" width="13" height="13" patternUnits="userSpaceOnUse">`
     + `<path d="M13 0V13M0 13H13" stroke="rgba(20,26,34,.13)" stroke-width="1"/></pattern>`
     + `<radialGradient id="sunG"><stop offset="0%" stop-color="rgba(255,196,84,.85)"/><stop offset="100%" stop-color="rgba(255,196,84,0)"/></radialGradient></defs>`
     + sun
     + `<text x="330" y="13" text-anchor="middle" font-size="12" font-weight="700" fill="#9AA0A6">N</text>`
-    + `<text x="330" y="556" text-anchor="middle" font-size="12" font-weight="700" fill="#9AA0A6">S</text>`
+    + `<text x="330" y="634" text-anchor="middle" font-size="12" font-weight="700" fill="#9AA0A6">S</text>`
     + `<text x="8" y="300" font-size="12" font-weight="700" fill="#9AA0A6">W</text>`
     + `<text x="652" y="300" text-anchor="end" font-size="12" font-weight="700" fill="#9AA0A6">O</text>`
     + g + `</svg>`;
