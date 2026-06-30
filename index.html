@@ -485,7 +485,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v46</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v47</span></p>
 
 </main>
 
@@ -1230,6 +1230,11 @@ function renderStrings(pl, wr){
   if(!o || !o.strings || !o.strings.length){
     host.innerHTML=`<div class="wrs-card"><div class="wrs-head"><span>${plantName} · WR ${wr}</span><small>keine String-Daten</small></div>`
       +`<div class="wrs-empty">Einzel-Strings erscheinen, sobald der aktualisierte Collector läuft und die Spalte <b>strings</b> in Supabase angelegt ist.</div></div>`;
+    return;
+  }
+  if((o.kw||0) < 0.4){   // WR liefert nichts → Rest-Spannungen nicht als Strings/Fehler zeigen
+    host.innerHTML=`<div class="wrs-card"><div class="wrs-head"><span>${plantName} · WR ${wr}</span><small>aus · 0 kW</small></div>`
+      +`<div class="wrs-empty">Wechselrichter liefert gerade keine Leistung – die einzelnen Strings werden ausgeblendet (kein Fehler; Rest-Spannungen des abgeschalteten WR).</div></div>`;
     return;
   }
   const list=o.strings.filter(s=>Math.abs(s.a)>0.05);
