@@ -522,7 +522,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v64</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v65</span></p>
 
 </main>
 
@@ -990,8 +990,10 @@ function buildCharts(s){
       {label:'Volleinspeiser',data:[],backgroundColor:RED,borderRadius:3},
       {label:'Eigenverbrauch',data:[],backgroundColor:GOLD,borderRadius:3}]},
     options:{responsive:true,maintainAspectRatio:false,
+      // Balken NEBENEINANDER (nicht gestapelt) – so sieht man den Unterschied beider Anlagen direkt
       plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>{const u=c.chart.$unit||'kWh';return c.dataset.label+': '+(u==='MWh'?nf1.format(c.parsed.y):nf0.format(c.parsed.y))+' '+u;}}}},
-      scales:{x:{stacked:true,grid:{display:false},border:{display:false},ticks:{maxTicksLimit:12}},y:{stacked:true,...axM('kWh')}}}});
+      barPercentage:0.9,categoryPercentage:0.78,
+      scales:{x:{stacked:false,grid:{display:false},border:{display:false},ticks:{maxTicksLimit:12}},y:{stacked:false,...axM('kWh')}}}});
   cEnergy.$unit='kWh';
 
   // Börsenpreis (heute + morgen, 48 h) vs Einspeisung – mit Negativpreis-Bändern
