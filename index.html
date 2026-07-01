@@ -512,7 +512,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v54</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v55</span></p>
 
 </main>
 
@@ -1266,9 +1266,11 @@ function renderFaults(s){
   const faults=[];
   ['voll','eigen'].forEach(pl=>{ (s.inv[pl]||[]).forEach(o=>{
     if(!o.strings || !o.strings.length || (o.kw||0)<0.4) return;   // WR aus → nicht bewerten
-    const pos=o.strings.map(x=>x.w).filter(w=>w>0).sort((a,b)=>a-b);
+    // Nur belegte Eingänge: PV8 ist laut Plan nie angeschlossen; offene Eingänge haben ~0 V.
+    const con=o.strings.filter(x=>x.pv!==8 && Math.abs(x.v)>50);
+    const pos=con.map(x=>x.w).filter(w=>w>0).sort((a,b)=>a-b);
     const med=pos.length?pos[Math.floor(pos.length/2)]:0;
-    o.strings.forEach(x=>{
+    con.forEach(x=>{
       if(x.a<-0.05) faults.push({pl,wr:o.wr,pv:x.pv,st:'bad'});
       else if(med>0 && Math.abs(x.a)>0.05 && x.w<med*0.5) faults.push({pl,wr:o.wr,pv:x.pv,st:'warn'});
     });
@@ -1323,8 +1325,8 @@ function renderStrings(pl, wr){
   // Nach SPANNUNG filtern, nicht nach Strom: ein echter PV-Eingang hat immer
   // Spannung (~600–720 V) – auch wenn er tot/rückspeisend/schwach ist und 0 A zieht.
   // Nur ein unbenutzter Eingang hat ~0 V. So bleiben gerade die Fehler-Strings sichtbar.
-  const list=o.strings.filter(s=>Math.abs(s.v)>50);
-  const show=list.length?list:o.strings;
+  const list=o.strings.filter(s=>s.pv!==8 && Math.abs(s.v)>50);   // PV8 nie belegt; offene Eingänge ~0 V
+  const show=list.length?list:o.strings.filter(s=>s.pv!==8);
   const maxW=Math.max(1,...show.map(s=>Math.abs(s.w)));
   const pos=show.map(s=>s.w).filter(w=>w>0).sort((a,b)=>a-b);
   const med=pos.length?pos[Math.floor(pos.length/2)]:0;
@@ -1602,7 +1604,8 @@ function buildStringReportHTML(rows, from, to){
   }
   // 1) gruppieren je plant|wr|pv
   const G=new Map();
-  rows.forEach(r=>{ const k=r.plant+'|'+r.wr+'|'+r.pv; let o=G.get(k);
+  rows.forEach(r=>{ if(r.pv===8) return;   // PV8 laut Plan nie belegt
+    const k=r.plant+'|'+r.wr+'|'+r.pv; let o=G.get(k);
     if(!o){ o={plant:r.plant, wr:r.wr, pv:r.pv, wh:0, maxW:0, days:new Set()}; G.set(k,o); }
     o.wh+=r.energy_wh||0; o.maxW=Math.max(o.maxW, r.max_w||0); if(r.tag) o.days.add(r.tag); });
   const P={ voll:{name:'Volleinspeiser', tariff:CONFIG.feedTariff.voll, wr:new Map()},
