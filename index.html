@@ -512,7 +512,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v61</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v62</span></p>
 
 </main>
 
@@ -1384,8 +1384,11 @@ function paint(s,first){
   document.getElementById('hi').textContent=greeting(h);
   document.getElementById('head').innerHTML=headline(s);
 
-  if(first){countUp(document.getElementById('ro-total'),total);countUp(document.getElementById('ro-load'),s.eigen.load);countUp(document.getElementById('ro-feed'),s.eigen.feed);countUp(document.getElementById('ro-grid'),s.eigen.grid);countUp(document.getElementById('ro-loadday'),s.eigen.loadDay||0);}
-  else{document.getElementById('ro-total').textContent=fmtKW(total);document.getElementById('ro-load').textContent=fmtKW(s.eigen.load);document.getElementById('ro-feed').textContent=fmtKW(s.eigen.feed);document.getElementById('ro-grid').textContent=fmtKW(s.eigen.grid);document.getElementById('ro-loadday').textContent=fmtKW(s.eigen.loadDay||0);}
+  // Netzbezug = Werks-Bezug (Verbrauch − eigene PV), nicht der netto-Zählerwert am NAP.
+  // Sonst zeigt die Kachel 0, obwohl das Werk real Strom zieht (Volleinspeiser deckt netto mit).
+  const eGrid=Math.max(0,(s.eigen.load||0)-(s.eigen.kw||0));
+  if(first){countUp(document.getElementById('ro-total'),total);countUp(document.getElementById('ro-load'),s.eigen.load);countUp(document.getElementById('ro-feed'),s.eigen.feed);countUp(document.getElementById('ro-grid'),eGrid);countUp(document.getElementById('ro-loadday'),s.eigen.loadDay||0);}
+  else{document.getElementById('ro-total').textContent=fmtKW(total);document.getElementById('ro-load').textContent=fmtKW(s.eigen.load);document.getElementById('ro-feed').textContent=fmtKW(s.eigen.feed);document.getElementById('ro-grid').textContent=fmtKW(eGrid);document.getElementById('ro-loadday').textContent=fmtKW(s.eigen.loadDay||0);}
   document.getElementById('ro-total-sub').textContent=fmtPct(total/peak*100);
   _liveTs = s.liveTs ? new Date(s.liveTs).getTime() : null; updateOffline();
 
@@ -1414,7 +1417,8 @@ function paint(s,first){
   document.getElementById('autarkie').innerHTML=nf0.format(s.eigen.autarkie)+'<small>%</small>';
   document.getElementById('b-eigen').innerHTML=nf0.format(s.eigen.selfKwh)+'<small>kWh</small>';
   document.getElementById('b-feed').innerHTML=nf0.format(s.eigen.feedKwh)+'<small>kWh</small>';
-  document.getElementById('b-bezug').innerHTML=nf0.format(s.eigen.gridKwh)+'<small>kWh</small>';
+  // Netzbezug (Tag) = Werksverbrauch − selbst genutzte PV → schließt die Bilanz (Eigenverbrauch + Netzbezug = Werksverbrauch)
+  document.getElementById('b-bezug').innerHTML=nf0.format(Math.max(0,(s.eigen.loadDay||0)-(s.eigen.selfKwh||0)))+'<small>kWh</small>';
   document.getElementById('b-load').innerHTML=nf0.format(s.eigen.loadDay||0)+'<small>kWh</small>';
 
   // Tabelle
