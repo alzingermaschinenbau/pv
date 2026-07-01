@@ -512,7 +512,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v56</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v57</span></p>
 
 </main>
 
@@ -1338,11 +1338,16 @@ function renderStrings(pl, wr){
   const pos=show.map(s=>s.w).filter(w=>w>0).sort((a,b)=>a-b);
   const med=pos.length?pos[Math.floor(pos.length/2)]:0;
   const nomW=stringNomW(pl, wr);   // Soll-Leistung je String (Wp) laut Plan
+  // Tages-kWh-Vergleich (zuverlässiger als der Momentwert): hält einen bekannten
+  // Fehler-String auch dann sichtbar, wenn der Momentanstrom kurz auf 0 fällt.
+  const dvals=show.map(s=>dmap[s.pv]).filter(v=>v!=null && v>0).sort((a,b)=>a-b);
+  const medDay=dvals.length?dvals[Math.floor(dvals.length/2)]:0;   // Median Tagesenergie (Wh)
   let rows='';
   show.forEach(s=>{
     let col='var(--green)', flag='';
     if(s.a<-0.05){ col='var(--brand)'; flag='<span class="wrs-flag bad">rückspeisend</span>'; }
     else if(med>2000 && s.w<med*0.5){ col='var(--gold)'; flag='<span class="wrs-flag warn">schwach</span>'; }   // „schwach" erst ab Median > 2 kW (kein Dämmerungs-Fehlalarm)
+    else if(medDay>2000 && dmap[s.pv]!=null && dmap[s.pv]<medDay*0.5){ col='var(--gold)'; flag='<span class="wrs-flag warn">wenig heute</span>'; }   // über den Tag deutlich hinter den Nachbarn
     const wpct=Math.max(2,Math.min(100,Math.abs(s.w)/maxW*100));
     const e=dmap[s.pv];
     const eTxt=(e!=null)?` · heute ${nf1.format(e/1000)} kWh`:'';
