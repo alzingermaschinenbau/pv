@@ -512,7 +512,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v58</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v59</span></p>
 
 </main>
 
@@ -1266,8 +1266,8 @@ function renderFaults(s){
   const faults=[]; let evaluatedSchwach=false;
   ['voll','eigen'].forEach(pl=>{ (s.inv[pl]||[]).forEach(o=>{
     if(!o.strings || !o.strings.length || (o.kw||0)<0.4) return;   // WR aus → nicht bewerten
-    // Nur belegte Eingänge: PV8 ist laut Plan nie angeschlossen; offene Eingänge haben ~0 V.
-    const con=o.strings.filter(x=>x.pv!==8 && Math.abs(x.v)>50);
+    // Nur belegte Eingänge: PV8 (alle WR) + hinterlegte offene Eingänge (z. B. Eigen WR3/4 PV6).
+    const con=o.strings.filter(x=>!isUnused(pl,o.wr,x.pv) && Math.abs(x.v)>50);
     const pos=con.map(x=>x.w).filter(w=>w>0).sort((a,b)=>a-b);
     const med=pos.length?pos[Math.floor(pos.length/2)]:0;
     if(med>2000) evaluatedSchwach=true;   // genug Sonne, um „schwach" verlässlich zu bewerten
@@ -1297,6 +1297,20 @@ function renderFaults(s){
 function stringNomW(pl, wr){
   if(pl==='voll') return 22*425;              // 9.350 Wp
   return (wr<=4 ? 21 : 20) * 425;             // Eigen: 8.925 Wp (50KTL) / 8.500 Wp (40KTL)
+}
+
+/* Nicht angeschlossene PV-Eingänge (Plan + Betreiber bestätigt).
+   PV8 ist bei ALLEN WR unbelegt (MPP4 nur 1 String). Zusätzlich einzelne
+   offene MPP3-Eingänge (PV6). Ein offener Eingang floatet auf der Spannung
+   seines MPP-Partners und würde sonst als „wenig heute" fehlgeflaggt. */
+const STRING_UNUSED = {
+  voll:  {},
+  eigen: { 3:[6], 4:[6] },   // Eigenverbrauch WR3 & WR4: PV6 nicht angeschlossen
+};
+function isUnused(pl, wr, pv){
+  if(pv===8) return true;                          // PV8 überall unbelegt
+  const u = (STRING_UNUSED[pl]||{})[wr];
+  return !!u && u.includes(pv);
 }
 
 /* String-Aufklappung: zeigt die einzelnen PV-Eingänge eines Wechselrichters */
@@ -1332,8 +1346,8 @@ function renderStrings(pl, wr){
   // Nach SPANNUNG filtern, nicht nach Strom: ein echter PV-Eingang hat immer
   // Spannung (~600–720 V) – auch wenn er tot/rückspeisend/schwach ist und 0 A zieht.
   // Nur ein unbenutzter Eingang hat ~0 V. So bleiben gerade die Fehler-Strings sichtbar.
-  const list=o.strings.filter(s=>s.pv!==8 && Math.abs(s.v)>50);   // PV8 nie belegt; offene Eingänge ~0 V
-  const show=list.length?list:o.strings.filter(s=>s.pv!==8);
+  const list=o.strings.filter(s=>!isUnused(pl,wr,s.pv) && Math.abs(s.v)>50);   // unbelegte/offene Eingänge raus
+  const show=list.length?list:o.strings.filter(s=>!isUnused(pl,wr,s.pv));
   const maxW=Math.max(1,...show.map(s=>Math.abs(s.w)));
   const pos=show.map(s=>s.w).filter(w=>w>0).sort((a,b)=>a-b);
   const med=pos.length?pos[Math.floor(pos.length/2)]:0;
@@ -1616,7 +1630,7 @@ function buildStringReportHTML(rows, from, to){
   }
   // 1) gruppieren je plant|wr|pv
   const G=new Map();
-  rows.forEach(r=>{ if(r.pv===8) return;   // PV8 laut Plan nie belegt
+  rows.forEach(r=>{ if(isUnused(r.plant, r.wr, r.pv)) return;   // unbelegte Eingänge (PV8, Eigen WR3/4 PV6)
     const k=r.plant+'|'+r.wr+'|'+r.pv; let o=G.get(k);
     if(!o){ o={plant:r.plant, wr:r.wr, pv:r.pv, wh:0, maxW:0, days:new Set()}; G.set(k,o); }
     o.wh+=r.energy_wh||0; o.maxW=Math.max(o.maxW, r.max_w||0); if(r.tag) o.days.add(r.tag); });
