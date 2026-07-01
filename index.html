@@ -512,7 +512,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v52</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v53</span></p>
 
 </main>
 
@@ -1313,7 +1313,10 @@ function renderStrings(pl, wr){
       +`<div class="wrs-empty">Wechselrichter liefert gerade keine Leistung – die einzelnen Strings werden ausgeblendet (kein Fehler; Rest-Spannungen des abgeschalteten WR).</div></div>`;
     return;
   }
-  const list=o.strings.filter(s=>Math.abs(s.a)>0.05);
+  // Nach SPANNUNG filtern, nicht nach Strom: ein echter PV-Eingang hat immer
+  // Spannung (~600–720 V) – auch wenn er tot/rückspeisend/schwach ist und 0 A zieht.
+  // Nur ein unbenutzter Eingang hat ~0 V. So bleiben gerade die Fehler-Strings sichtbar.
+  const list=o.strings.filter(s=>Math.abs(s.v)>50);
   const show=list.length?list:o.strings;
   const maxW=Math.max(1,...show.map(s=>Math.abs(s.w)));
   const pos=show.map(s=>s.w).filter(w=>w>0).sort((a,b)=>a-b);
