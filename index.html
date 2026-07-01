@@ -139,6 +139,13 @@
   .donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
   .donut-center .big{font-weight:800;font-size:2.3rem;line-height:1;color:var(--green);font-variant-numeric:tabular-nums}
   .donut-center .cap{font-size:.74rem;color:var(--muted);font-weight:600;margin-top:3px}
+  /* Zwei gleichwertige Kennzahlen: Eigenverbrauchsquote + Autarkiegrad */
+  .keyduo{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);
+    border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden;margin-bottom:14px}
+  .keyduo>div{background:var(--card);padding:12px 14px;text-align:center}
+  .keyduo .kv{font-weight:800;font-size:1.9rem;line-height:1;font-variant-numeric:tabular-nums}
+  .keyduo .kv small{font-size:.9rem;font-weight:700;margin-left:1px}
+  .keyduo .kk{font-size:.74rem;color:var(--muted);font-weight:600;margin-top:4px}
 
   /* table */
   .tbl{width:100%;border-collapse:collapse;font-size:.9rem}
@@ -330,12 +337,15 @@
         <canvas id="chartBilanz"></canvas>
         <div class="donut-center"><div class="big" id="quote">0&nbsp;%</div><div class="cap">Eigenverbrauchsquote</div></div>
       </div>
+      <div class="keyduo">
+        <div><div class="kv" style="color:var(--blue)" id="autarkie">0<small>%</small></div><div class="kk">Autarkiegrad heute</div></div>
+        <div><div class="kv" style="color:var(--blue)" id="autarkie-yr">0<small>%</small></div><div class="kk">Autarkiegrad Jahr&nbsp;&Oslash;</div></div>
+      </div>
       <div class="tiles">
         <div class="tile"><div class="tk"><span class="swatch" style="background:var(--green)"></span>Eigenverbrauch</div><div class="tv" id="b-eigen">0<small>kWh</small></div></div>
         <div class="tile"><div class="tk"><span class="swatch" style="background:var(--brand)"></span>Einspeisung</div><div class="tv" id="b-feed">0<small>kWh</small></div></div>
         <div class="tile"><div class="tk"><span class="swatch" style="background:var(--gold)"></span>Netzbezug</div><div class="tv" id="b-bezug">0<small>kWh</small></div></div>
         <div class="tile"><div class="tk"><span class="swatch" style="background:var(--blue)"></span>Stromverbrauch heute</div><div class="tv" id="b-load">0<small>kWh</small></div></div>
-        <div class="tile"><div class="tk">Autarkiegrad</div><div class="tv" id="autarkie">0<small>%</small></div></div>
       </div>
     </div>
     <div class="card">
@@ -512,7 +522,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v62</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v63</span></p>
 
 </main>
 
@@ -662,7 +672,7 @@ const Demo={
       voll:{kw:vollKw,day:vollDay,month:84500,year:352000,kwp:615},
       eigen:{kw:pvKw,load:loadKw,feed:feedKw,grid:gridKw,day:pvDay,month:46000,year:191000,kwp:335,
              selfKwh:self,feedKwh:feed,gridKwh:grid,loadDay:loadDay,loadMonth:38000,loadYear:152000,
-             quote:pvDay>0?self/pvDay*100:0,autarkie:loadDay>0?self/loadDay*100:0},
+             quote:pvDay>0?self/pvDay*100:0,autarkie:loadDay>0?self/loadDay*100:0,autarkieYear:58},
       curve:{labels:Array.from({length:N},(_,k)=>{const m=k*STEP;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}),
              voll:vollC,eigen:eigenC,load:loadC,nowIdx:i},
       daily:daily30(), dailyAll:daily30(), monthly:monthly12(),
@@ -814,6 +824,16 @@ const Supa = {
     const loadMon  = (loadM || []).filter(r => r.monat === curMon).reduce((a,b) => a + (b.load_kwh || 0), 0);
     const loadYr   = (loadM || []).filter(r => r.monat.startsWith(curYr)).reduce((a,b) => a + (b.load_kwh || 0), 0);
 
+    // Autarkiegrad Jahresschnitt (Schätzung aus Tagesdaten): je Tag self ≈ min(Erzeugung, Verbrauch),
+    // energiegewichtet über das laufende Jahr. Genauer Wert bräuchte gespeicherte Tages-Autarkie.
+    const eigenGenByDay = {};
+    (daily || []).filter(r => r.plant === 'eigen').forEach(r => { eigenGenByDay[r.tag] = r.gen_kwh || 0; });
+    (histD || []).filter(r => r.plant === 'eigen').forEach(r => { if(eigenGenByDay[r.tag] == null) eigenGenByDay[r.tag] = r.gen_kwh || 0; });
+    let selfYrSum = 0, loadYrDays = 0;
+    (loadD || []).forEach(r => { if(!(r.tag || '').startsWith(curYr)) return; const L = r.load_kwh || 0; if(L <= 0) return;
+      selfYrSum += Math.min(eigenGenByDay[r.tag] || 0, L); loadYrDays += L; });
+    const autarkieYear = loadYrDays > 0 ? Math.min(100, selfYrSum / loadYrDays * 100) : 0;
+
     // 4) Börsenpreise (heute + morgen, 48 h) + Einspeise-Summenkurve
     const pad2 = n => String(n).padStart(2,'0');
     const labels48 = Array.from({ length: 2*N }, (_, k) => { const mm = (k % N) * STEP; return (k >= N ? '+1 ' : '') + pad2(Math.floor(mm/60)) + ':' + pad2(mm%60); });
@@ -874,7 +894,8 @@ const Supa = {
       eigen: { kw: e.p_kw || 0, load: e.load_kw || 0, feed: e.feed_kw || 0, grid: e.grid_kw || 0,
                day: eDay, month: sumMon('eigen'), year: sumYr('eigen'), kwp: CONFIG.plants.eigen.kwp,
                selfKwh, feedKwh: eigenFeedKwh, gridKwh, loadDay: loadDayE, loadMonth: loadMon, loadYear: loadYr,
-               quote: eigenDay > 0 ? selfKwh / eigenDay * 100 : 0, autarkie: loadDay > 0 ? Math.min(100, selfKwh / loadDay * 100) : 0 },
+               quote: eigenDay > 0 ? selfKwh / eigenDay * 100 : 0, autarkie: loadDay > 0 ? Math.min(100, selfKwh / loadDay * 100) : 0,
+               autarkieYear },
       curve: { labels, voll: vollC, eigen: eigenC, load: loadC, nowIdx },
       inv: { voll: invBuild('voll', CONFIG.invNominal.voll), eigen: invBuild('eigen', CONFIG.invNominal.eigen) },
       daily: dailyArr,
@@ -1415,6 +1436,7 @@ function paint(s,first){
   // Bilanz
   document.getElementById('quote').innerHTML=fmtPct(s.eigen.quote);
   document.getElementById('autarkie').innerHTML=nf0.format(s.eigen.autarkie)+'<small>%</small>';
+  { const ay=document.getElementById('autarkie-yr'); if(ay) ay.innerHTML=(s.eigen.autarkieYear?nf0.format(s.eigen.autarkieYear):'–')+'<small>%</small>'; }
   document.getElementById('b-eigen').innerHTML=nf0.format(s.eigen.selfKwh)+'<small>kWh</small>';
   document.getElementById('b-feed').innerHTML=nf0.format(s.eigen.feedKwh)+'<small>kWh</small>';
   // Netzbezug (Tag) = Werksverbrauch − selbst genutzte PV → schließt die Bilanz (Eigenverbrauch + Netzbezug = Werksverbrauch)
