@@ -512,7 +512,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v51</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v52</span></p>
 
 </main>
 
@@ -1308,7 +1308,7 @@ function renderStrings(pl, wr){
       +`<div class="wrs-empty">Einzel-Strings erscheinen, sobald der aktualisierte Collector läuft und die Spalte <b>strings</b> in Supabase angelegt ist.</div></div>`;
     return;
   }
-  if((o.kw||0) < 0.4){   // WR liefert nichts → Rest-Spannungen nicht als Strings/Fehler zeigen
+  if((o.kw||0) < 0.1){   // WR wirklich aus (~0 kW) → Rest-Spannungen nicht als Strings zeigen
     host.innerHTML=`<div class="wrs-card"><div class="wrs-head"><span>${plantName} · WR ${wr}</span><small>aus · 0 kW</small></div>`
       +`<div class="wrs-empty">Wechselrichter liefert gerade keine Leistung – die einzelnen Strings werden ausgeblendet (kein Fehler; Rest-Spannungen des abgeschalteten WR).</div></div>`;
     return;
@@ -1322,7 +1322,7 @@ function renderStrings(pl, wr){
   show.forEach(s=>{
     let col='var(--green)', flag='';
     if(s.a<-0.05){ col='var(--brand)'; flag='<span class="wrs-flag bad">rückspeisend</span>'; }
-    else if(med>0 && s.w<med*0.5){ col='var(--gold)'; flag='<span class="wrs-flag warn">schwach</span>'; }
+    else if(med>300 && s.w<med*0.5){ col='var(--gold)'; flag='<span class="wrs-flag warn">schwach</span>'; }   // „schwach" erst ab spürbarer Leistung (kein Fehlalarm früh morgens)
     const wpct=Math.max(2,Math.min(100,Math.abs(s.w)/maxW*100));
     const e=dmap[s.pv];
     const eTxt=(e!=null)?`<div class="sub">heute ${nf1.format(e/1000)} kWh</div>`:'';
