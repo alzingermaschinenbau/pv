@@ -522,7 +522,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v63</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v64</span></p>
 
 </main>
 
@@ -767,9 +767,9 @@ const Supa = {
     const eigenFeedKwh = Math.max(0, eigenDay - selfKwh);
 
     // 3) Tages- und Monatsenergie (30-Tage / 12-Monate / Monat / Jahr) + Stromverbrauch
-    let daily, monthly, loadD, loadM, histD, histM, zeroEv, histCur, negDaily;
+    let daily, monthly, loadD, loadM, histD, histM, zeroEv, histCur, negDaily, autD;
     if(_slowCache.daily && (Date.now() - _slowCache.dmTs) < SUPA_DM_TTL){
-      daily = _slowCache.daily; monthly = _slowCache.monthly; loadD = _slowCache.loadD; loadM = _slowCache.loadM; histD = _slowCache.histD; histM = _slowCache.histM; zeroEv = _slowCache.zeroEv; histCur = _slowCache.histCur; negDaily = _slowCache.negDaily;
+      daily = _slowCache.daily; monthly = _slowCache.monthly; loadD = _slowCache.loadD; loadM = _slowCache.loadM; histD = _slowCache.histD; histM = _slowCache.histM; zeroEv = _slowCache.zeroEv; histCur = _slowCache.histCur; negDaily = _slowCache.negDaily; autD = _slowCache.autD;
     } else {
       daily   = await this._q('pv_daily?select=plant,tag,gen_kwh&order=tag.asc').catch(() => []);
       monthly = await this._q('pv_monthly?select=plant,monat,gen_kwh&order=monat.asc').catch(() => []);
@@ -780,7 +780,8 @@ const Supa = {
       zeroEv  = await this._q('pv_zero_events?select=plant,von,bis,dauer_min&order=von.asc').catch(() => []);  // echte Abschaltungen (0 kW tagsüber)
       histCur = await this._q('pv_hist_curtail?select=plant,tag,actual_kwh,expected_kwh,lost_kwh,sun_pct,dauer_h,von,bis,quelle&order=tag.asc').catch(() => []);  // Abregelung-Historie (5min/geschätzt)
       negDaily = await this._q('pv_spot_neg_daily?select=tag,neg_h&order=tag.asc').catch(() => []);  // Negativpreis-Stunden je Tag (Bericht)
-      _slowCache.daily = daily; _slowCache.monthly = monthly; _slowCache.loadD = loadD; _slowCache.loadM = loadM; _slowCache.histD = histD; _slowCache.histM = histM; _slowCache.zeroEv = zeroEv; _slowCache.histCur = histCur; _slowCache.negDaily = negDaily; _slowCache.dmTs = Date.now();
+      autD    = await this._q('pv_autarkie_daily?select=tag,self_kwh,load_kwh&order=tag.asc').catch(() => []);  // exakte Tages-Autarkie
+      _slowCache.daily = daily; _slowCache.monthly = monthly; _slowCache.loadD = loadD; _slowCache.loadM = loadM; _slowCache.histD = histD; _slowCache.histM = histM; _slowCache.zeroEv = zeroEv; _slowCache.histCur = histCur; _slowCache.negDaily = negDaily; _slowCache.autD = autD; _slowCache.dmTs = Date.now();
     }
 
     // Tageskarte: erst Historie, dann Live (Live hat Vorrang bei gleichem Datum)
@@ -832,7 +833,11 @@ const Supa = {
     let selfYrSum = 0, loadYrDays = 0;
     (loadD || []).forEach(r => { if(!(r.tag || '').startsWith(curYr)) return; const L = r.load_kwh || 0; if(L <= 0) return;
       selfYrSum += Math.min(eigenGenByDay[r.tag] || 0, L); loadYrDays += L; });
-    const autarkieYear = loadYrDays > 0 ? Math.min(100, selfYrSum / loadYrDays * 100) : 0;
+    const autarkieYearEst = loadYrDays > 0 ? Math.min(100, selfYrSum / loadYrDays * 100) : 0;
+    // Exakter Jahreswert aus pv_autarkie_daily (5-Min-genau) – bevorzugt, sonst Schätzung.
+    let selfExact = 0, loadExact = 0;
+    (autD || []).forEach(r => { if(!(r.tag || '').startsWith(curYr)) return; selfExact += r.self_kwh || 0; loadExact += r.load_kwh || 0; });
+    const autarkieYear = loadExact > 0 ? Math.min(100, selfExact / loadExact * 100) : autarkieYearEst;
 
     // 4) Börsenpreise (heute + morgen, 48 h) + Einspeise-Summenkurve
     const pad2 = n => String(n).padStart(2,'0');
