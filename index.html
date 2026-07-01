@@ -315,7 +315,7 @@
       <span class="t" id="dr-time">--:--</span>
       <span><i style="background:var(--brand)"></i>Voll <b id="dr-voll">–</b></span>
       <span><i style="background:var(--gold)"></i>Eigen <b id="dr-eigen">–</b></span>
-      <span><i style="background:var(--char)"></i>Verbrauch <b id="dr-load">–</b></span>
+      <span><i style="background:var(--blue)"></i>Verbrauch <b id="dr-load">–</b></span>
     </div>
     <div class="chart-box tall"><canvas id="chartDay"></canvas></div>
     <p class="finehint" style="text-align:center;margin-top:8px">Linie ziehen ↔ zeigt Uhrzeit &amp; Werte</p>
@@ -512,7 +512,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v57</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v58</span></p>
 
 </main>
 
@@ -944,7 +944,7 @@ function buildCharts(s){
     data:{labels:s.curve.labels,datasets:[
       {label:'Volleinspeiser',data:s.curve.voll,borderColor:RED,backgroundColor:'rgba(203,42,36,.10)',fill:true,tension:.4,pointRadius:0,borderWidth:2.4},
       {label:'Eigenverbrauch',data:s.curve.eigen,borderColor:GOLD,backgroundColor:'rgba(200,136,31,.10)',fill:true,tension:.4,pointRadius:0,borderWidth:2.4},
-      {label:'Verbrauch',data:s.curve.load,borderColor:CHAR,borderDash:[5,4],fill:false,tension:.35,pointRadius:0,borderWidth:1.6},
+      {label:'Verbrauch',data:s.curve.load,borderColor:BLUE,borderDash:[6,4],fill:false,tension:.35,pointRadius:0,borderWidth:2.2},
     ]},
     options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
       plugins:{legend:{display:false},tooltip:{enabled:false}},
