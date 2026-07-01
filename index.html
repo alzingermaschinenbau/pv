@@ -512,7 +512,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v55</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v56</span></p>
 
 </main>
 
@@ -1263,19 +1263,26 @@ function renderInverters(s){
    Nur produzierende WR werden bewertet – ein abgeschalteter WR ist kein Fehler. */
 function renderFaults(s){
   const host=document.getElementById('wrFaults'); if(!host||!s.inv) return;
-  const faults=[];
+  const faults=[]; let evaluatedSchwach=false;
   ['voll','eigen'].forEach(pl=>{ (s.inv[pl]||[]).forEach(o=>{
     if(!o.strings || !o.strings.length || (o.kw||0)<0.4) return;   // WR aus → nicht bewerten
     // Nur belegte Eingänge: PV8 ist laut Plan nie angeschlossen; offene Eingänge haben ~0 V.
     const con=o.strings.filter(x=>x.pv!==8 && Math.abs(x.v)>50);
     const pos=con.map(x=>x.w).filter(w=>w>0).sort((a,b)=>a-b);
     const med=pos.length?pos[Math.floor(pos.length/2)]:0;
+    if(med>2000) evaluatedSchwach=true;   // genug Sonne, um „schwach" verlässlich zu bewerten
     con.forEach(x=>{
-      if(x.a<-0.05) faults.push({pl,wr:o.wr,pv:x.pv,st:'bad'});
-      else if(med>0 && Math.abs(x.a)>0.05 && x.w<med*0.5) faults.push({pl,wr:o.wr,pv:x.pv,st:'warn'});
+      if(x.a<-0.05) faults.push({pl,wr:o.wr,pv:x.pv,st:'bad'});   // rückspeisend: immer (echter Fehler)
+      // schwach: erst wenn die Nachbar-Strings wirklich liefern (Median > 2 kW ≈ 20% Nennleistung),
+      // sonst Dämmerungs-Fehlalarme bei 1% Sonne.
+      else if(med>2000 && Math.abs(x.a)>0.05 && x.w<med*0.5) faults.push({pl,wr:o.wr,pv:x.pv,st:'warn'});
     });
   }); });
-  if(!faults.length){ host.className='wr-faults ok'; host.innerHTML='✓ Keine Störungen – alle Strings liefern plausibel.'; return; }
+  if(!faults.length){ host.className='wr-faults ok';
+    host.innerHTML = evaluatedSchwach
+      ? '✓ Keine Störungen – alle Strings liefern plausibel.'
+      : '✓ Keine rückspeisenden Strings. Schwache Strings bewertet die App ab mehr Sonne (der Nachbar-Vergleich braucht Leistung).';
+    return; }
   faults.sort((a,b)=> a.st===b.st?0 : a.st==='bad'?-1:1);
   const pn=pl=>pl==='voll'?'V':'E';
   const rows=faults.map(f=>`<div class="wrf-row" data-pl="${f.pl}" data-wr="${f.wr}">`
@@ -1335,7 +1342,7 @@ function renderStrings(pl, wr){
   show.forEach(s=>{
     let col='var(--green)', flag='';
     if(s.a<-0.05){ col='var(--brand)'; flag='<span class="wrs-flag bad">rückspeisend</span>'; }
-    else if(med>300 && s.w<med*0.5){ col='var(--gold)'; flag='<span class="wrs-flag warn">schwach</span>'; }   // „schwach" erst ab spürbarer Leistung (kein Fehlalarm früh morgens)
+    else if(med>2000 && s.w<med*0.5){ col='var(--gold)'; flag='<span class="wrs-flag warn">schwach</span>'; }   // „schwach" erst ab Median > 2 kW (kein Dämmerungs-Fehlalarm)
     const wpct=Math.max(2,Math.min(100,Math.abs(s.w)/maxW*100));
     const e=dmap[s.pv];
     const eTxt=(e!=null)?` · heute ${nf1.format(e/1000)} kWh`:'';
