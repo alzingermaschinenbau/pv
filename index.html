@@ -512,7 +512,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v53</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v54</span></p>
 
 </main>
 
@@ -1283,6 +1283,13 @@ function renderFaults(s){
   host.innerHTML=`<div class="wrf-card"><div class="wrf-head"><span>⚠ ${faults.length} Störung${faults.length>1?'en':''} · auffällige Strings</span><span style="font-weight:700;font-size:.72rem;color:var(--muted-2)">antippen für Details</span></div>${rows}</div>`;
 }
 
+/* Soll-Leistung je String (Wp) aus den PV*SOL-Plänen · Modul JinKO JKM425N = 425 Wp.
+   Volleinspeiser: 22 Module/String. Eigenverbrauch: WR1–4 (50KTL) 21, WR5/6 (40KTL) 20. */
+function stringNomW(pl, wr){
+  if(pl==='voll') return 22*425;              // 9.350 Wp
+  return (wr<=4 ? 21 : 20) * 425;             // Eigen: 8.925 Wp (50KTL) / 8.500 Wp (40KTL)
+}
+
 /* String-Aufklappung: zeigt die einzelnen PV-Eingänge eines Wechselrichters */
 let wrSel=null;
 const _strDaily={};   // 'pl|wr' -> {t, map:{pv:energy_wh}} – Tagesenergie je String
@@ -1321,6 +1328,7 @@ function renderStrings(pl, wr){
   const maxW=Math.max(1,...show.map(s=>Math.abs(s.w)));
   const pos=show.map(s=>s.w).filter(w=>w>0).sort((a,b)=>a-b);
   const med=pos.length?pos[Math.floor(pos.length/2)]:0;
+  const nomW=stringNomW(pl, wr);   // Soll-Leistung je String (Wp) laut Plan
   let rows='';
   show.forEach(s=>{
     let col='var(--green)', flag='';
@@ -1328,15 +1336,16 @@ function renderStrings(pl, wr){
     else if(med>300 && s.w<med*0.5){ col='var(--gold)'; flag='<span class="wrs-flag warn">schwach</span>'; }   // „schwach" erst ab spürbarer Leistung (kein Fehlalarm früh morgens)
     const wpct=Math.max(2,Math.min(100,Math.abs(s.w)/maxW*100));
     const e=dmap[s.pv];
-    const eTxt=(e!=null)?`<div class="sub">heute ${nf1.format(e/1000)} kWh</div>`:'';
+    const eTxt=(e!=null)?` · heute ${nf1.format(e/1000)} kWh`:'';
     rows+=`<div class="wrs-row"><span class="pv">PV${s.pv}${flag}</span>`
       +`<span class="wrs-bar"><i style="width:${wpct}%;background:${col}"></i></span>`
-      +`<span class="val">${nf0.format(s.w)}<small> W</small><div class="sub">${nf1.format(s.v)} V · ${nf1.format(s.a)} A</div>${eTxt}</span></div>`;
+      +`<span class="val">${nf0.format(s.w)}<small> W</small><div class="sub">${nf1.format(s.v)} V · ${nf1.format(s.a)} A</div><div class="sub">Soll ${nf0.format(nomW)} Wp${eTxt}</div></span></div>`;
   });
   const sum=show.reduce((a,s)=>a+s.w,0);
   const eday=Object.values(dmap).reduce((a,b)=>a+(b||0),0);
   const dayTxt=eday?` · heute ${nf1.format(eday/1000)} kWh`:'';
-  host.innerHTML=`<div class="wrs-card"><div class="wrs-head"><span>${plantName} · WR ${wr}</span><small>${show.length} Strings · ${nf0.format(sum)} W${dayTxt}</small></div>${rows}</div>`;
+  const sollTxt=` · Soll ${nf1.format(nomW*show.length/1000)} kWp`;   // WR-Gesamt-Soll (Summe der Strings)
+  host.innerHTML=`<div class="wrs-card"><div class="wrs-head"><span>${plantName} · WR ${wr}</span><small>${show.length} Strings · ${nf0.format(sum)} W${sollTxt}${dayTxt}</small></div>${rows}</div>`;
 }
 
 function paint(s,first){
