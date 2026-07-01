@@ -512,7 +512,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v59</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v60</span></p>
 
 </main>
 
@@ -1304,8 +1304,8 @@ function stringNomW(pl, wr){
    offene MPP3-Eingänge (PV6). Ein offener Eingang floatet auf der Spannung
    seines MPP-Partners und würde sonst als „wenig heute" fehlgeflaggt. */
 const STRING_UNUSED = {
-  voll:  {},
-  eigen: { 3:[6], 4:[6] },   // Eigenverbrauch WR3 & WR4: PV6 nicht angeschlossen
+  voll:  { 2:[4] },                       // Volleinspeiser WR2: PV4 nicht angeschlossen
+  eigen: { 3:[6], 4:[6], 5:[6], 6:[6] },  // Eigenverbrauch WR3–6: PV6 nicht angeschlossen
 };
 function isUnused(pl, wr, pv){
   if(pv===8) return true;                          // PV8 überall unbelegt
