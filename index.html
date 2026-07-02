@@ -427,6 +427,7 @@
   <div class="erow"><span class="eyebrow">Abschaltungen &amp; Abregelung</span><span class="chint">30 Tage</span></div>
   <div class="grid2">
     <div class="card">
+      <div id="ab-live" style="display:none;margin-bottom:12px"></div>
       <div class="tiles">
         <div class="tile"><div class="tk">Abschaltungen</div><div class="tv" id="ab-count">0</div></div>
         <div class="tile"><div class="tk">Gesamtdauer</div><div class="tv" id="ab-hours">0 <small>Std.</small></div></div>
@@ -522,7 +523,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v70</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v71</span></p>
 
 </main>
 
@@ -1170,13 +1171,53 @@ function setupDayScrub(){
 /* ============================================================
    ANZEIGE
    ============================================================ */
+/* Live-Abregelung heute aus der 5-Min-Kurve: Dauer, entgangene kWh (Schätzung)
+   und vermutlicher Verursacher. „Voll aus, Eigen läuft" → Erwartung aus Eigen
+   skaliert (615/335). „Beide aus tagsüber" → letzte Leistung vor der Abschaltung
+   als Untergrenze gehalten. Dämmerung zählt nicht (Referenz < 15 kW). */
+function liveCurtailToday(s){
+  const cm=s.curveMin; if(!cm) return null;
+  const V=cm.voll,E=cm.eigen,n=V.length;
+  const kv=CONFIG.plants.voll.kwp,ke=CONFIG.plants.eigen.kwp;
+  let firstProd=-1,maxTot=0;
+  for(let k=0;k<n;k++){ if(V[k]==null&&E[k]==null) continue; const t=(V[k]||0)+(E[k]||0);
+    if(t>maxTot)maxTot=t; if(firstProd<0&&t>10)firstProd=k; }
+  if(firstProd<0||maxTot<30) return {min:0,lost:0,active:false,negMin:0};
+  let refV=0,refE=0,min=0,lost=0,lastCur=false,negMin=0;
+  const price=s.spot&&s.spot.price;   // 15-Min-Raster
+  for(let k=firstProd;k<n;k++){
+    const v=V[k],e=E[k]; if(v==null&&e==null) break;
+    const vOff=(v||0)<3, eOff=(e||0)<3;
+    if(!vOff) refV=v; if(!eOff) refE=e;
+    let cur=false;
+    if(vOff&&!eOff&&(e||0)>8){ lost+=e*kv/ke*5/60; cur=true; }          // Voll abgeregelt, Eigen läuft
+    else if(vOff&&eOff&&refV>15){ lost+=(refV+refE)*5/60; cur=true; }    // beide aus tagsüber
+    if(cur){ min+=5; const p=price?price[Math.min(price.length-1,Math.floor(k/3))]:null; if(p!=null&&p<0) negMin+=5; }
+    lastCur=cur;
+  }
+  return {min,lost:Math.round(lost),active:lastCur,negMin};
+}
+function renderLiveCurtail(s){
+  const box=document.getElementById('ab-live'); if(!box) return;
+  const lc=s.$lc;
+  if(!lc||!lc.min){ box.style.display='none'; return; }
+  const eur=lc.lost*CONFIG.feedTariff.voll;
+  const cause=lc.negMin>=lc.min/2
+    ? 'vermutlich Direktvermarkter (Negativpreis)'
+    : 'vermutlich Netzbetreiber / extern (Spotpreis nicht negativ)';
+  box.style.display='block';
+  box.innerHTML=`<div class="wrf-card"><div class="wrf-head"><span>${lc.active?'⚠ Wird gerade abgeregelt':'⚠ Heute abgeregelt'}</span><small style="color:var(--muted);font-weight:700">${cause}</small></div>`
+    +`<div style="background:var(--card);padding:10px 13px;font-weight:800;font-size:.95rem">${nf1.format(lc.min/60)} Std. · ~${nf0.format(lc.lost)} kWh entgangen · ~${nf0.format(eur)} €`
+    +`<div class="finehint" style="margin-top:4px">Schätzung aus der 5-Min-Kurve; bei „beide Anlagen aus" wird die letzte Leistung vor der Abschaltung als Untergrenze gehalten. Vergütung 9,289 ct/kWh.</div></div></div>`;
+}
 function countUp(el,target,dur=900){const start=performance.now();const from=parseFloat(el.dataset.v||'0')||0;
   function step(t){const p=Math.min(1,(t-start)/dur);const e=1-Math.pow(1-p,3);el.textContent=fmtKW(from+(target-from)*e);
     if(p<1)requestAnimationFrame(step);else{el.textContent=fmtKW(target);el.dataset.v=target;}}requestAnimationFrame(step);}
 
 function greeting(h){return h<11?'Guten Morgen':h<17?'Guten Tag':h<22?'Guten Abend':'Gute Nacht';}
 function headline(s){const tot=s.voll.kw+s.eigen.kw, peak=s.voll.kwp+s.eigen.kwp;
-  // Eine Anlage liefert ~0, die andere produziert (= Sonne da) → abgeregelt/abgeschaltet
+  // Abregelung live erkennen (auch wenn BEIDE Anlagen auf 0 stehen, tagsüber)
+  if(s.$lc&&s.$lc.active&&s.voll.kw<3&&s.eigen.kw<3) return 'Beide Anlagen <span class="r">abgeschaltet / abgeregelt</span>.';
   if(s.eigen.kw>5 && s.voll.kw<3) return 'Volleinspeiser <span class="r">abgeschaltet / abgeregelt</span> – Eigenverbrauch läuft.';
   if(s.voll.kw>5 && s.eigen.kw<3) return 'Eigenverbrauch <span class="r">abgeschaltet / abgeregelt</span> – Volleinspeiser läuft.';
   if(s.spot&&s.spot.now<0&&s.spot.feedTot[s.curve.nowIdx]>1) return 'Achtung: <span class="r">Negativpreis</span> bei Einspeisung.';
@@ -1443,6 +1484,7 @@ function paint(s,first){
   lastSnap=s; renderEnergy(energyRange); if(cLoad) renderLoad(loadRange); renderInverters(s);
   // „Jetzt"-Linie folgt live der aktuellen Uhrzeit; nur beim aktiven Ziehen bleibt sie am Finger.
   { const dc=s.curveMin||s.curve; if(cDay) updateDayReadout(cDay.$userScrub && cDay.$scrubIdx!=null ? cDay.$scrubIdx : (dc?dc.nowIdx:0)); }
+  s.$lc=liveCurtailToday(s); renderLiveCurtail(s);   // Live-Abregelung heute (Dauer/kWh/€ + Verursacher)
   const total=s.voll.kw+s.eigen.kw, peak=s.voll.kwp+s.eigen.kwp;
   const h=s.now.getHours()+s.now.getMinutes()/60;
   document.getElementById('hi').textContent=greeting(h);
