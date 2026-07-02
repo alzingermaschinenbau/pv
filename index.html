@@ -316,7 +316,7 @@
   </div>
 
   <!-- Tagesverlauf -->
-  <div class="erow" id="sec-verlauf"><span class="eyebrow">Tagesverlauf</span><span class="chint">heute · 15-Min · kW</span></div>
+  <div class="erow" id="sec-verlauf"><span class="eyebrow">Tagesverlauf</span><span class="chint">heute · 5-Min · kW</span></div>
   <div class="card">
     <div class="dayread" id="dayReadout">
       <span class="t" id="dr-time">--:--</span>
@@ -522,7 +522,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v68</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v69</span></p>
 
 </main>
 
@@ -675,8 +675,8 @@ const Demo={
              quote:pvDay>0?self/pvDay*100:0,autarkie:loadDay>0?self/loadDay*100:0,autarkieYear:58},
       curve:{labels:Array.from({length:N},(_,k)=>{const m=k*STEP;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}),
              voll:vollC,eigen:eigenC,load:loadC,nowIdx:i},
-      curveMin:(()=>{const SM=5,M=Math.floor(24*60/SM),exp=a=>Array.from({length:M},(_,mi)=>{const f=mi*SM/STEP,i0=Math.floor(f),i1=Math.min(a.length-1,i0+1),t=f-i0;return (a[i0]||0)*(1-t)+(a[i1]||0)*t;});
-             return{labels:Array.from({length:M},(_,k)=>String(Math.floor(k*SM/60)).padStart(2,'0')+':'+String((k*SM)%60).padStart(2,'0')),voll:exp(vollC),eigen:exp(eigenC),load:exp(loadC),nowIdx:Math.floor(i*STEP/SM)};})(),
+      curveMin:(()=>{const SM=5,M=Math.floor(24*60/SM),nowSlot=Math.floor(i*STEP/SM),exp=a=>Array.from({length:M},(_,mi)=>{const f=mi*SM/STEP,i0=Math.floor(f),i1=Math.min(a.length-1,i0+1),t=f-i0;return (a[i0]||0)*(1-t)+(a[i1]||0)*t;}),cut=a=>a.map((v,k)=>k<=nowSlot?v:null);
+             return{labels:Array.from({length:M},(_,k)=>String(Math.floor(k*SM/60)).padStart(2,'0')+':'+String((k*SM)%60).padStart(2,'0')),voll:cut(exp(vollC)),eigen:cut(exp(eigenC)),load:cut(exp(loadC)),nowIdx:nowSlot};})(),
       daily:daily30(), dailyAll:daily30(), monthly:monthly12(),
       yearly:[{label:'2023',voll:892000,eigen:486000},{label:'2024',voll:586435,eigen:328485},{label:'2025',voll:611000,eigen:341000},{label:'2026',voll:298000,eigen:162000}],
       spot:{price:spotC,feedTot,
@@ -910,10 +910,14 @@ const Supa = {
         else if(r.plant === 'eigen'){ eS[slot] += r.p_kw || 0; eC[slot]++; lS[slot] += r.load_kw || 0; lC[slot]++; } });
       const avg = (s,c) => Array.from({ length: MM }, (_, k) => c[k] ? +(s[k]/c[k]).toFixed(2) : 0);
       const lblM = Array.from({ length: MM }, (_, k) => p2(Math.floor(k*STEPM/60)) + ':' + p2((k*STEPM)%60));
-      curveMin = { labels: lblM, voll: avg(vS,vC), eigen: avg(eS,eC), load: avg(lS,lC), nowIdx: nowIdx5 };
+      // Letzter Slot mit echten Messwerten = Spitze der Live-Kurve.
+      let lastIdx = -1; for(let k=0;k<MM;k++){ if(vC[k]||eC[k]||lC[k]) lastIdx=k; }
+      if(lastIdx < 0) lastIdx = nowIdx5;
+      const cut = a => a.map((v,k) => k<=lastIdx ? v : null);   // nach dem letzten Messpunkt nicht auf 0 weiterzeichnen
+      curveMin = { labels: lblM, voll: cut(avg(vS,vC)), eigen: cut(avg(eS,eC)), load: cut(avg(lS,lC)), nowIdx: lastIdx };
       _slowCache.curveMin = curveMin; _slowCache.curveMinTs = Date.now();
     } else {
-      curveMin = { ...curveMin, nowIdx: nowIdx5 };   // Jetzt-Linie zwischen den Fetches live weiterrücken
+      curveMin = { ...curveMin };   // Linie bleibt auf dem letzten Messpunkt (Daten kommen im ~1-Min-Takt neu)
     }
 
     return {
