@@ -522,7 +522,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v65</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v66</span></p>
 
 </main>
 
@@ -1130,9 +1130,12 @@ function setupDayScrub(){
     const cx=(ev.touches&&ev.touches[0])?ev.touches[0].clientX:ev.clientX;
     const idx=Math.round(cDay.scales.x.getValueForPixel(cx-r.left));
     updateDayReadout(idx); };
-  cDay.canvas.addEventListener('pointerdown',e=>{drag=true;scrub(e);});
+  const backToNow=()=>{ drag=false; cDay.$userScrub=false;   // Loslassen → Linie zurück auf „jetzt"
+    const c=lastSnap&&lastSnap.curve; if(c) updateDayReadout(c.nowIdx); };
+  cDay.canvas.addEventListener('pointerdown',e=>{drag=true;cDay.$userScrub=true;scrub(e);});
   window.addEventListener('pointermove',e=>{ if(drag) scrub(e); });
-  window.addEventListener('pointerup',()=>{drag=false;});
+  window.addEventListener('pointerup',backToNow);
+  window.addEventListener('pointercancel',backToNow);
 }
 
 /* ============================================================
@@ -1406,7 +1409,8 @@ function renderStrings(pl, wr){
 
 function paint(s,first){
   lastSnap=s; renderEnergy(energyRange); if(cLoad) renderLoad(loadRange); renderInverters(s);
-  if(cDay) updateDayReadout(cDay.$scrubIdx!=null?cDay.$scrubIdx:(s.curve?s.curve.nowIdx:0));
+  // „Jetzt"-Linie folgt live der aktuellen Uhrzeit; nur beim aktiven Ziehen bleibt sie am Finger.
+  if(cDay) updateDayReadout(cDay.$userScrub && cDay.$scrubIdx!=null ? cDay.$scrubIdx : (s.curve?s.curve.nowIdx:0));
   const total=s.voll.kw+s.eigen.kw, peak=s.voll.kwp+s.eigen.kwp;
   const h=s.now.getHours()+s.now.getMinutes()/60;
   document.getElementById('hi').textContent=greeting(h);
