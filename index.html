@@ -522,7 +522,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v67</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v68</span></p>
 
 </main>
 
@@ -675,8 +675,8 @@ const Demo={
              quote:pvDay>0?self/pvDay*100:0,autarkie:loadDay>0?self/loadDay*100:0,autarkieYear:58},
       curve:{labels:Array.from({length:N},(_,k)=>{const m=k*STEP;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}),
              voll:vollC,eigen:eigenC,load:loadC,nowIdx:i},
-      curveMin:(()=>{const M=1440,exp=a=>Array.from({length:M},(_,mi)=>{const f=mi/STEP,i0=Math.floor(f),i1=Math.min(a.length-1,i0+1),t=f-i0;return (a[i0]||0)*(1-t)+(a[i1]||0)*t;});
-             return{labels:Array.from({length:M},(_,k)=>String(Math.floor(k/60)).padStart(2,'0')+':'+String(k%60).padStart(2,'0')),voll:exp(vollC),eigen:exp(eigenC),load:exp(loadC),nowIdx:i*STEP};})(),
+      curveMin:(()=>{const SM=5,M=Math.floor(24*60/SM),exp=a=>Array.from({length:M},(_,mi)=>{const f=mi*SM/STEP,i0=Math.floor(f),i1=Math.min(a.length-1,i0+1),t=f-i0;return (a[i0]||0)*(1-t)+(a[i1]||0)*t;});
+             return{labels:Array.from({length:M},(_,k)=>String(Math.floor(k*SM/60)).padStart(2,'0')+':'+String((k*SM)%60).padStart(2,'0')),voll:exp(vollC),eigen:exp(eigenC),load:exp(loadC),nowIdx:Math.floor(i*STEP/SM)};})(),
       daily:daily30(), dailyAll:daily30(), monthly:monthly12(),
       yearly:[{label:'2023',voll:892000,eigen:486000},{label:'2024',voll:586435,eigen:328485},{label:'2025',voll:611000,eigen:341000},{label:'2026',voll:298000,eigen:162000}],
       spot:{price:spotC,feedTot,
@@ -895,23 +895,25 @@ const Supa = {
       actual: r.actual_kwh || 0, expected: r.expected_kwh || 0, lost: r.lost_kwh || 0, sun: r.sun_pct || 0,
       dauer: r.dauer_h, von: r.von, bis: r.bis, quelle: r.quelle }));
 
-    // Tagesverlauf im 1-Minuten-Takt aus pv_samples – separat gecacht (~1 Min),
-    // damit nicht bei jedem 10-Sek-Tick die Tagesrohdaten neu geladen werden.
-    const nowIdxMin = now.getHours()*60 + now.getMinutes();
+    // Tagesverlauf im 5-Minuten-Takt aus pv_samples (pro Slot gemittelt → ruhiger).
+    // Separat gecacht (~1 Min), damit nicht bei jedem 10-Sek-Tick die Tagesrohdaten neu geladen werden.
+    const STEPM = 5, MM = Math.floor(24*60/STEPM);   // 288 Slots à 5 Min
+    const nowIdx5 = Math.min(MM-1, Math.floor((now.getHours()*60 + now.getMinutes()) / STEPM));
     let curveMin = _slowCache.curveMin;
     if(!curveMin || (Date.now() - (_slowCache.curveMinTs || 0)) > 55000){
       const p2 = n => String(n).padStart(2,'0');
       const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0,0,0).toISOString();
       const sm = await this._q(`pv_samples?ts=gte.${encodeURIComponent(dayStart)}&select=plant,p_kw,load_kw,ts&order=ts.asc&limit=6000`).catch(() => []);
-      const M = 1440, vM = new Array(M).fill(0), eM = new Array(M).fill(0), lM = new Array(M).fill(0);
-      (sm || []).forEach(r => { const d = new Date(r.ts); const mi = d.getHours()*60 + d.getMinutes(); if(mi < 0 || mi >= M) return;
-        if(r.plant === 'voll'){ vM[mi] = r.p_kw || 0; }
-        else if(r.plant === 'eigen'){ eM[mi] = r.p_kw || 0; lM[mi] = r.load_kw || 0; } });
-      const lblM = Array.from({ length: M }, (_, k) => p2(Math.floor(k/60)) + ':' + p2(k%60));
-      curveMin = { labels: lblM, voll: vM, eigen: eM, load: lM, nowIdx: nowIdxMin };
+      const vS=new Array(MM).fill(0), vC=new Array(MM).fill(0), eS=new Array(MM).fill(0), eC=new Array(MM).fill(0), lS=new Array(MM).fill(0), lC=new Array(MM).fill(0);
+      (sm || []).forEach(r => { const d = new Date(r.ts); const slot = Math.floor((d.getHours()*60 + d.getMinutes()) / STEPM); if(slot < 0 || slot >= MM) return;
+        if(r.plant === 'voll'){ vS[slot] += r.p_kw || 0; vC[slot]++; }
+        else if(r.plant === 'eigen'){ eS[slot] += r.p_kw || 0; eC[slot]++; lS[slot] += r.load_kw || 0; lC[slot]++; } });
+      const avg = (s,c) => Array.from({ length: MM }, (_, k) => c[k] ? +(s[k]/c[k]).toFixed(2) : 0);
+      const lblM = Array.from({ length: MM }, (_, k) => p2(Math.floor(k*STEPM/60)) + ':' + p2((k*STEPM)%60));
+      curveMin = { labels: lblM, voll: avg(vS,vC), eigen: avg(eS,eC), load: avg(lS,lC), nowIdx: nowIdx5 };
       _slowCache.curveMin = curveMin; _slowCache.curveMinTs = Date.now();
     } else {
-      curveMin = { ...curveMin, nowIdx: nowIdxMin };   // Jetzt-Linie zwischen den Fetches live weiterrücken
+      curveMin = { ...curveMin, nowIdx: nowIdx5 };   // Jetzt-Linie zwischen den Fetches live weiterrücken
     }
 
     return {
