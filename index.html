@@ -523,7 +523,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v71</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v72</span></p>
 
 </main>
 
@@ -714,6 +714,19 @@ const Supa = {
     if(!r.ok) throw new Error('Supabase ' + r.status + ' bei ' + path);
     return r.json();
   },
+  // Große Abfragen: Supabase liefert max. 1.000 Zeilen pro Request → seitenweise
+  // holen (Range-Pagination), bis eine Seite nicht mehr voll ist.
+  async _qAll(path, maxPages = 6){
+    const out = [], size = 1000;
+    for(let p = 0; p < maxPages; p++){
+      const r = await fetch(CONFIG.supabaseUrl + '/rest/v1/' + path,
+        { headers: { ...this._hdr(), 'Range-Unit': 'items', 'Range': `${p*size}-${p*size + size - 1}` } });
+      if(!r.ok){ if(p === 0) throw new Error('Supabase ' + r.status + ' bei ' + path); break; }
+      const j = await r.json(); out.push(...j);
+      if(j.length < size) break;
+    }
+    return out;
+  },
   now(){ return new Date(); },
   // Tagesenergie je String (heute) für einen Wechselrichter – für die Auswertung
   async stringDaily(pl, wr){
@@ -723,7 +736,7 @@ const Supa = {
   },
   // ALLE Strings über einen Zeitraum (für den String-Genaubericht im PDF)
   async stringRange(from, to){
-    return this._q(`pv_string_daily?tag=gte.${from}&tag=lte.${to}&select=plant,wr,pv,tag,energy_wh,max_w&order=plant.asc,wr.asc,pv.asc&limit=200000`).catch(() => []);
+    return this._qAll(`pv_string_daily?tag=gte.${from}&tag=lte.${to}&select=plant,wr,pv,tag,energy_wh,max_w&order=plant.asc,wr.asc,pv.asc`, 60).catch(() => []);
   },
   async snapshot(){
     // 1) Aktueller Stand je Anlage (Pflicht – wirft bei Verbindungsproblem -> Demo-Fallback)
@@ -904,7 +917,7 @@ const Supa = {
     if(!curveMin || (Date.now() - (_slowCache.curveMinTs || 0)) > 55000){
       const p2 = n => String(n).padStart(2,'0');
       const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0,0,0).toISOString();
-      const sm = await this._q(`pv_samples?ts=gte.${encodeURIComponent(dayStart)}&select=plant,p_kw,load_kw,ts&order=ts.asc&limit=6000`).catch(() => []);
+      const sm = await this._qAll(`pv_samples?ts=gte.${encodeURIComponent(dayStart)}&select=plant,p_kw,load_kw,ts&order=ts.asc`, 4).catch(() => []);
       const vS=new Array(MM).fill(0), vC=new Array(MM).fill(0), eS=new Array(MM).fill(0), eC=new Array(MM).fill(0), lS=new Array(MM).fill(0), lC=new Array(MM).fill(0);
       (sm || []).forEach(r => { const d = new Date(r.ts); const slot = Math.floor((d.getHours()*60 + d.getMinutes()) / STEPM); if(slot < 0 || slot >= MM) return;
         if(r.plant === 'voll'){ vS[slot] += r.p_kw || 0; vC[slot]++; }
