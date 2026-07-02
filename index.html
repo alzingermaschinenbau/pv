@@ -215,6 +215,29 @@
     padding:12px 16px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:9px}
   .rep-strbtn small{font-weight:600;color:var(--muted-2);font-size:.72rem;margin-left:auto}
   .rep-strbody{margin-top:6px}
+  /* Markt & Abregelung (eine Karte: Status · Kern-Zahlen · Zeitstrahl · Details) */
+  .mk-status{display:flex;align-items:flex-start;gap:10px;background:var(--brand-soft);border-radius:var(--r-sm);padding:11px 13px;margin-bottom:12px}
+  .mk-status .ic{font-size:1.05rem;line-height:1.25}
+  .mk-status .tx{font-weight:800;font-size:.86rem;color:var(--brand);line-height:1.35}
+  .mk-status .tx small{display:block;font-weight:700;color:var(--muted);font-size:.72rem;margin-top:2px}
+  .mk-status.ok{background:var(--green-soft)} .mk-status.ok .tx{color:var(--green)}
+  .mk-kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden;margin-bottom:12px}
+  .mk-kpis>div{background:var(--card);padding:11px 13px;min-width:0}
+  .mk-kpis .k{color:var(--muted);font-size:.72rem;font-weight:700}
+  .mk-kpis .v{font-weight:800;font-size:1.12rem;margin-top:2px;font-variant-numeric:tabular-nums}
+  .mk-kpis .v small{font-size:.68rem;font-weight:700;color:var(--muted)}
+  .mk-badge{display:inline-block;font-size:.6rem;font-weight:800;padding:2px 7px;border-radius:999px;vertical-align:2px;margin-left:5px}
+  .mk-badge.neg{background:var(--brand-soft);color:var(--brand)} .mk-badge.pos{background:var(--green-soft);color:var(--green)}
+  .mk-bar{display:flex;height:26px;border-radius:8px;overflow:hidden;border:1px solid var(--line)}
+  .mk-bar i{display:block;height:100%}
+  .mk-lbl{display:flex;justify-content:space-between;font-size:.66rem;color:var(--muted-2);font-weight:700;margin-top:4px}
+  .mk-leg{display:flex;gap:11px;flex-wrap:wrap;font-size:.7rem;font-weight:700;color:var(--muted);margin-top:8px}
+  .mk-leg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+  /* Wetter-Kachel (Dashboard) */
+  .wxrow{display:flex;gap:13px;align-items:center;margin-top:2px}
+  .wxic{font-size:1.6rem}
+  .wxc b{display:block;font-weight:800;font-size:1.02rem;font-variant-numeric:tabular-nums}
+  .wxc small{color:var(--muted);font-size:.66rem;font-weight:600}
   /* Wechselrichter · Dach-Draufsicht */
   .wr-sum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);
     border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden;margin-bottom:14px}
@@ -299,6 +322,12 @@
     <div class="kcard" style="--ac:var(--purple)"><div class="kl">Einspeisung</div><hr><div class="kn" id="ro-feed" style="color:var(--purple)">0</div><div class="ku">kW netto ins Netz</div></div>
     <div class="kcard" style="--ac:var(--gold)"><div class="kl">Netzbezug</div><hr><div class="kn" id="ro-grid" style="color:var(--gold)">0</div><div class="ku">kW aus dem Netz</div></div>
     <div class="kcard" id="k-spot" style="--ac:var(--green)"><div class="kl">Spotpreis jetzt</div><hr><div class="kn" id="ro-spot" style="color:var(--green)">0</div><div class="ku" id="ro-spot-u">ct/kWh</div></div>
+    <div class="kcard" style="--ac:var(--green)"><div class="kl">Wetter heute · Schierling</div><hr>
+      <div class="wxrow"><span class="wxic" id="wx-ic">–</span>
+        <span class="wxc"><b id="wx-sun">–</b><small>Sonne</small></span>
+        <span class="wxc"><b id="wx-rain">–</b><small>Regen</small></span>
+        <span class="wxc"><b id="wx-cloud">–</b><small>Wolken</small></span></div>
+      <div class="ku" id="wx-yday">wird geladen …</div></div>
   </div>
 
   <div class="erow"><span class="eyebrow">Anlagen jetzt</span></div>
@@ -405,29 +434,42 @@
     <p class="finehint">Jede Fläche ist der echte Wechselrichter-Bereich laut Belegungsplan. Farbe &amp; kW kommen live aus der Anlage – morgens liefern die Ostflächen (rechts) zuerst. Auslastung bezogen auf die Nennleistung je WR.</p>
   </div>
 
-  <!-- Börsenstrompreis -->
-  <div class="erow" id="sec-boerse"><span class="eyebrow">Börsenstrompreis</span><span class="chint">EPEX DE-LU · heute &amp; morgen · 15-Min</span></div>
+  <!-- Markt & Abregelung: Status → Kern-Zahlen → Zeitstrahl → Details aufklappbar -->
+  <div class="erow" id="sec-boerse"><span class="eyebrow">Markt &amp; Abregelung</span><span class="chint">Börse · heute · 30 Tage</span></div>
   <div class="card">
-    <div class="tiles" style="margin-bottom:14px">
-      <div class="tile"><div class="tk">Spotpreis jetzt</div><div class="tv" id="sp-now">– <small>ct/kWh</small></div><span class="pricepill" id="sp-pill">—</span></div>
-      <div class="tile"><div class="tk">Negativpreis heute</div><div class="tv" id="sp-neghours">0 <small>Std.</small></div></div>
-      <div class="tile"><div class="tk">Einspeisung bei Negativpreis</div><div class="tv neg" id="sp-negfeed">0 <small>kWh</small></div></div>
-      <div class="tile"><div class="tk">Ø / Min / Max heute</div><div class="tv" id="sp-stats" style="font-size:.95rem">– / – / –</div></div>
+    <div id="ab-live" class="mk-status" style="display:none"></div>
+    <div class="mk-kpis">
+      <div><div class="k">Spotpreis jetzt</div><div class="v" id="mk-spot">–</div></div>
+      <div><div class="k">Negativpreis heute</div><div class="v" id="mk-neg">– <small>Std.</small></div></div>
+      <div><div class="k">Einspeisung ohne Vergütung</div><div class="v" id="mk-negfeed" style="color:var(--brand)">– <small>kWh</small></div></div>
+      <div><div class="k">Abregelung 30 Tage</div><div class="v" id="mk-30d">–</div></div>
     </div>
-    <div class="legend">
-      <span><i style="background:var(--gold)"></i>Einspeisung gesamt (kW)</span>
-      <span><i style="background:var(--blue)"></i>Spotpreis (ct/kWh)</span>
-      <span><i style="background:var(--brand-soft);border:1px solid var(--brand)"></i>Negativpreis-Phase</span>
+    <div class="mk-bar" id="mk-bar"><i style="flex:1;background:#EEF0F3"></i></div>
+    <div class="mk-lbl"><span>0 h</span><span>6 h</span><span>12 h</span><span>18 h</span><span>24 h</span></div>
+    <div class="mk-leg">
+      <span><i style="background:var(--gold)"></i>eingespeist</span>
+      <span><i style="background:var(--brand)"></i>Negativpreis-Abregelung</span>
+      <span><i style="background:#3A3F46"></i>abgeschaltet (extern)</span>
     </div>
-    <div class="chart-box tall"><canvas id="chartPrice"></canvas></div>
-    <p class="finehint" id="sp-rule">—</p>
-  </div>
+    <button id="mkToggle" class="rep-strbtn" type="button" aria-expanded="false">▸ Spotpreis-Chart, Ereignisse &amp; Historie anzeigen <small>Details</small></button>
+    <div id="mkWrap" class="rep-strbody" hidden>
 
-  <!-- Abschaltungen -->
-  <div class="erow"><span class="eyebrow">Abschaltungen &amp; Abregelung</span><span class="chint">30 Tage</span></div>
-  <div class="grid2">
-    <div class="card">
-      <div id="ab-live" style="display:none;margin-bottom:12px"></div>
+      <div class="rep-sec" style="margin-top:16px">Börsenstrompreis · EPEX DE-LU · heute &amp; morgen · 15-Min</div>
+      <div class="tiles" style="margin-bottom:14px">
+        <div class="tile"><div class="tk">Spotpreis jetzt</div><div class="tv" id="sp-now">– <small>ct/kWh</small></div><span class="pricepill" id="sp-pill">—</span></div>
+        <div class="tile"><div class="tk">Negativpreis heute</div><div class="tv" id="sp-neghours">0 <small>Std.</small></div></div>
+        <div class="tile"><div class="tk">Einspeisung bei Negativpreis</div><div class="tv neg" id="sp-negfeed">0 <small>kWh</small></div></div>
+        <div class="tile"><div class="tk">Ø / Min / Max heute</div><div class="tv" id="sp-stats" style="font-size:.95rem">– / – / –</div></div>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--gold)"></i>Einspeisung gesamt (kW)</span>
+        <span><i style="background:var(--blue)"></i>Spotpreis (ct/kWh)</span>
+        <span><i style="background:var(--brand-soft);border:1px solid var(--brand)"></i>Negativpreis-Phase</span>
+      </div>
+      <div class="chart-box tall"><canvas id="chartPrice"></canvas></div>
+      <p class="finehint" id="sp-rule">—</p>
+
+      <div class="rep-sec">Abschaltungen &amp; Abregelung · 30 Tage</div>
       <div class="tiles">
         <div class="tile"><div class="tk">Abschaltungen</div><div class="tv" id="ab-count">0</div></div>
         <div class="tile"><div class="tk">Gesamtdauer</div><div class="tv" id="ab-hours">0 <small>Std.</small></div></div>
@@ -435,21 +477,15 @@
         <div class="tile"><div class="tk">davon Anlage 0 kW</div><div class="tv" id="ab-grid" style="color:#7a5512">0</div></div>
       </div>
       <div class="chart-box" style="margin-top:14px"><canvas id="chartCurtail"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="chart-head"><div class="ctitle">Letzte Ereignisse</div></div>
+
+      <div class="rep-sec">Letzte Ereignisse</div>
       <table class="tbl evtbl">
         <thead><tr><th>Datum</th><th>Zeit</th><th>Dauer</th><th>Grund</th><th>kWh</th></tr></thead>
         <tbody id="ab-rows"></tbody>
       </table>
       <p class="finehint">Anlage 0 kW = Erzeugung lag tagsüber (10–17 Uhr) auf null – die Anlage wurde abgeschaltet. Negativpreis = marktbedingte Abregelung durch den Direktvermarkter (ohne Entschädigung).</p>
-    </div>
-  </div>
 
-  <!-- Abregelung Historie (geschätzt aus Tagesdaten) -->
-  <div class="erow"><span class="eyebrow">Abregelung Historie · geschätzt</span><span class="chint">aus Tagesdaten beider Anlagen</span></div>
-  <div class="grid2">
-    <div class="card">
+      <div class="rep-sec">Abregelung Historie · geschätzt <small style="font-weight:600;color:var(--muted-2)">aus Tagesdaten beider Anlagen</small></div>
       <div class="tiles">
         <div class="tile"><div class="tk">Abschalt-Tage</div><div class="tv" id="hc-days">0</div></div>
         <div class="tile"><div class="tk">Entgangene Erzeugung</div><div class="tv neg" id="hc-lost">0 <small>kWh</small></div></div>
@@ -457,10 +493,7 @@
         <div class="tile"><div class="tk">davon Eigenverbrauch</div><div class="tv" id="hc-eigen">0</div></div>
       </div>
       <div class="chart-box" style="margin-top:14px"><canvas id="chartHistCurtail"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="chart-head"><div class="ctitle">Größte Verluste</div></div>
-      <button id="hcToggle" class="rep-strbtn" type="button" aria-expanded="false" style="margin-top:2px">▸ Verlust-Liste anzeigen <small>größte Verlusttage</small></button>
+      <button id="hcToggle" class="rep-strbtn" type="button" aria-expanded="false" style="margin-top:12px">▸ Verlust-Liste anzeigen <small>größte Verlusttage</small></button>
       <div id="hcWrap" class="rep-strbody" hidden>
         <table class="tbl evtbl">
           <thead><tr><th>Datum</th><th>Anlage</th><th>Zeit</th><th>Dauer</th><th>Verlust</th></tr></thead>
@@ -523,7 +556,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v73</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v74</span></p>
 
 </main>
 
@@ -1213,15 +1246,69 @@ function liveCurtailToday(s){
 function renderLiveCurtail(s){
   const box=document.getElementById('ab-live'); if(!box) return;
   const lc=s.$lc;
-  if(!lc||!lc.min){ box.style.display='none'; return; }
+  box.style.display='flex';
+  if(!lc||!lc.min){
+    box.className='mk-status ok';
+    box.innerHTML=`<span class="ic">✓</span><div class="tx">Keine Abregelung heute – Anlagen speisen normal ein.</div>`;
+    return;
+  }
   const eur=lc.lost*CONFIG.feedTariff.voll;
   const cause=lc.negMin>=lc.min/2
-    ? 'vermutlich Direktvermarkter (Negativpreis)'
-    : 'vermutlich Netzbetreiber / extern (Spotpreis nicht negativ)';
-  box.style.display='block';
-  box.innerHTML=`<div class="wrf-card"><div class="wrf-head"><span>${lc.active?'⚠ Wird gerade abgeregelt':'⚠ Heute abgeregelt'}</span><small style="color:var(--muted);font-weight:700">${cause}</small></div>`
-    +`<div style="background:var(--card);padding:10px 13px;font-weight:800;font-size:.95rem">${nf1.format(lc.min/60)} Std. · ~${nf0.format(lc.lost)} kWh entgangen · ~${nf0.format(eur)} €`
-    +`<div class="finehint" style="margin-top:4px">Schätzung aus der 5-Min-Kurve; bei „beide Anlagen aus" wird die letzte Leistung vor der Abschaltung als Untergrenze gehalten. Vergütung 9,289 ct/kWh.</div></div></div>`;
+    ? 'Negativpreis (Direktvermarkter)'
+    : 'Netzbetreiber / extern (Spotpreis nicht negativ)';
+  box.className='mk-status';
+  box.innerHTML=`<span class="ic">⚠️</span><div class="tx">${lc.active?'Wird gerade abgeregelt':'Heute abgeregelt'} · ${nf1.format(lc.min/60)} Std. · ~${nf0.format(lc.lost)} kWh · ~${nf0.format(eur)} €`
+    +`<small>${cause} · Schätzung aus der 5-Min-Kurve, Vergütung 9,289 ct/kWh</small></div>`;
+}
+/* Kern-Zahlen der Markt-Karte */
+function renderMarketKpis(s){
+  const set=(id,html)=>{const el=document.getElementById(id); if(el) el.innerHTML=html;};
+  if(s.spot){ const neg=s.spot.now<0;
+    set('mk-spot',`<span style="color:${neg?'var(--brand)':'var(--green)'}">${nf1.format(s.spot.now)}</span> <small>ct</small><span class="mk-badge ${neg?'neg':'pos'}">${neg?'negativ':'positiv'}</span>`);
+    set('mk-neg',`${nf1.format(s.spot.negHours)} <small>Std.</small>`);
+    set('mk-negfeed',`${nf0.format(s.spot.negFeedKwh)} <small>kWh</small>`);
+  }
+  if(s.curtail){ const hrs=s.curtail.reduce((a,e)=>a+e.dur,0);
+    set('mk-30d',`${s.curtail.length} <small>Ereign. · ${nf1.format(hrs)} h</small>`); }
+}
+/* Tages-Zeitstrahl: gold = eingespeist, rot = Negativpreis-Abregelung,
+   dunkel = extern abgeschaltet, hellgrau = Nacht/keine Daten. */
+function renderMarketBar(s){
+  const el=document.getElementById('mk-bar'); if(!el||!s.curveMin) return;
+  const V=s.curveMin.voll,E=s.curveMin.eigen,n=V.length,price=s.spot&&s.spot.price;
+  let firstProd=-1;
+  for(let k=0;k<n;k++){ if(V[k]==null&&E[k]==null) continue; if(((V[k]||0)+(E[k]||0))>10){ firstProd=k; break; } }
+  let refV=0; const cls=new Array(n).fill('rest');
+  for(let k=0;k<n;k++){
+    const v=V[k],e=E[k];
+    if(v==null&&e==null){ cls[k]='rest'; continue; }
+    const vOff=(v||0)<3, eOff=(e||0)<3;
+    if(!vOff) refV=v;
+    let cur=false;
+    if(firstProd>=0&&k>=firstProd){
+      if(vOff&&!eOff&&(e||0)>8) cur=true;
+      else if(vOff&&eOff&&refV>15) cur=true;
+    }
+    if(cur){ const p=price?price[Math.min(price.length-1,Math.floor(k/3))]:null; cls[k]=(p!=null&&p<0)?'neg':'ext'; }
+    else cls[k]=((v||0)+(e||0))>3?'feed':'rest';
+  }
+  const col={rest:'#EEF0F3',feed:'var(--gold)',neg:'var(--brand)',ext:'#3A3F46'};
+  let html='',run=cls[0],len=1;
+  for(let k=1;k<=n;k++){ if(k<n&&cls[k]===run){ len++; continue; }
+    html+=`<i style="flex:${len};background:${col[run]}"></i>`; if(k<n){ run=cls[k]; len=1; } }
+  el.innerHTML=html;
+}
+/* Wetter-Kachel im Dashboard (Daten aus ensureWeather / Open-Meteo) */
+function renderWeatherTile(s){
+  const el=id=>document.getElementById(id); if(!el('wx-ic')) return;
+  const w=_weather.map[dKey(s.now)];
+  if(!w){ return; }
+  el('wx-ic').textContent = w.rain>1?'🌧️':(w.cloud<30?'☀️':(w.cloud<70?'⛅':'☁️'));
+  el('wx-sun').textContent=nf1.format(w.sun)+' h';
+  el('wx-rain').textContent=nf1.format(w.rain)+' mm';
+  el('wx-cloud').textContent=w.cloud+' %';
+  const y=new Date(s.now); y.setDate(y.getDate()-1); const wy=_weather.map[dKey(y)];
+  el('wx-yday').textContent = wy?`gestern: ☀ ${nf1.format(wy.sun)} h · 🌧 ${nf1.format(wy.rain)} mm`:'';
 }
 function countUp(el,target,dur=900){const start=performance.now();const from=parseFloat(el.dataset.v||'0')||0;
   function step(t){const p=Math.min(1,(t-start)/dur);const e=1-Math.pow(1-p,3);el.textContent=fmtKW(from+(target-from)*e);
@@ -1498,6 +1585,7 @@ function paint(s,first){
   // „Jetzt"-Linie folgt live der aktuellen Uhrzeit; nur beim aktiven Ziehen bleibt sie am Finger.
   { const dc=s.curveMin||s.curve; if(cDay) updateDayReadout(cDay.$userScrub && cDay.$scrubIdx!=null ? cDay.$scrubIdx : (dc?dc.nowIdx:0)); }
   s.$lc=liveCurtailToday(s); renderLiveCurtail(s);   // Live-Abregelung heute (Dauer/kWh/€ + Verursacher)
+  renderMarketKpis(s); renderMarketBar(s); renderWeatherTile(s);   // Markt-Karte + Wetter-Kachel
   const total=s.voll.kw+s.eigen.kw, peak=s.voll.kwp+s.eigen.kwp;
   const h=s.now.getHours()+s.now.getMinutes()/60;
   document.getElementById('hi').textContent=greeting(h);
@@ -1642,6 +1730,13 @@ async function openStrings(pl, wr){
   fb.addEventListener('click',e=>{ const t=e.target.closest('[data-wr]'); if(!t) return;
     openStrings(t.getAttribute('data-pl'), +t.getAttribute('data-wr')); });
 })();
+
+/* Markt & Abregelung: Details (Preis-Chart, Ereignisse, Historie) ein-/ausklappen */
+(function(){ const b=document.getElementById('mkToggle'), w=document.getElementById('mkWrap'); if(!b||!w) return;
+  b.addEventListener('click',()=>{ const open=w.hidden; w.hidden=!open; b.setAttribute('aria-expanded',open);
+    b.innerHTML=(open?'▾ Spotpreis-Chart, Ereignisse &amp; Historie ausblenden':'▸ Spotpreis-Chart, Ereignisse &amp; Historie anzeigen')+' <small>Details</small>';
+    // Charts wurden versteckt initialisiert → beim Öffnen auf Containergröße bringen
+    if(open) setTimeout(()=>{ [cPrice,cCurtail,cHistCurtail].forEach(c=>{ try{ c&&c.resize(); }catch(_){} }); },60); }); })();
 
 /* „Größte Verluste"-Liste ein-/ausklappen (hält die App kurz) */
 (function(){ const b=document.getElementById('hcToggle'), w=document.getElementById('hcWrap'); if(!b||!w) return;
