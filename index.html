@@ -282,6 +282,9 @@
   .wrs-row .val{font-weight:800;font-variant-numeric:tabular-nums;text-align:right;font-size:.9rem}
   .wrs-row .val small{font-weight:600;color:var(--muted);font-size:.62rem}
   .wrs-row .sub{color:var(--muted-2);font-weight:600;font-size:.68rem;margin-top:1px}
+  .wrs-loss{border-top:1px solid var(--line);background:#FFF8F1;padding:10px 13px;
+    font-size:.78rem;font-weight:600;color:var(--ink-2);line-height:1.55}
+  .wrs-loss b{font-weight:800}
   .wrs-flag{font-size:.64rem;font-weight:800;padding:1px 7px;border-radius:999px}
   .wrs-flag.bad{background:var(--brand-soft);color:var(--brand)}
   .wrs-flag.warn{background:#FBF0DD;color:#9a6a12}
@@ -556,7 +559,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v74</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v75</span></p>
 
 </main>
 
@@ -672,6 +675,11 @@ const Demo={
   now(){return new Date(this._simBase+(Date.now()-this._start));},
   idxNow(){const n=this.now();const h=n.getHours()+n.getMinutes()/60;return Math.min(N-1,Math.floor(h*60/STEP));},
   jit(){return 0.985+0.03*rnd();},
+  // Demo: Aufzeichnung eines Wechselrichters (7 Tage) für die Verlust-Auswertung.
+  async stringHistory(pl, wr){
+    const all=await this.stringRange(dKey(new Date(Date.now()-6*864e5)), dKey(new Date()));
+    return all.filter(r=>r.plant===pl&&r.wr===wr).map(r=>({pv:r.pv,tag:r.tag,energy_wh:r.energy_wh}));
+  },
   // Demo-Variante des String-Genauberichts: erzeugt je String Tageswerte über den Zeitraum.
   async stringRange(from, to){
     const pad=n=>String(n).padStart(2,'0');
@@ -770,6 +778,10 @@ const Supa = {
   // ALLE Strings über einen Zeitraum (für den String-Genaubericht im PDF)
   async stringRange(from, to){
     return this._qAll(`pv_string_daily?tag=gte.${from}&tag=lte.${to}&select=plant,wr,pv,tag,energy_wh,max_w&order=plant.asc,wr.asc,pv.asc`, 60).catch(() => []);
+  },
+  // Komplette Aufzeichnung EINES Wechselrichters (für die Verlust-Auswertung je String)
+  async stringHistory(pl, wr){
+    return this._qAll(`pv_string_daily?plant=eq.${pl}&wr=eq.${wr}&select=pv,tag,energy_wh&order=tag.asc`, 10).catch(() => []);
   },
   async snapshot(){
     // 1) Aktueller Stand je Anlage (Pflicht – wirft bei Verbindungsproblem -> Demo-Fallback)
@@ -1511,6 +1523,12 @@ const STRING_UNUSED = {
   voll:  { 2:[4], 7:[6], 8:[6], 9:[6], 10:[6] },   // Volleinspeiser: WR2 PV4, WR7–10 PV6 nicht angeschlossen
   eigen: { 3:[6], 4:[6], 5:[6], 6:[6] },           // Eigenverbrauch WR3–6: PV6 nicht angeschlossen
 };
+/* Bekannter Fehlerbeginn je String (aus der FusionSolar-Historie belegt).
+   Für die Hochrechnung des Gesamtverlusts vor Beginn unserer Aufzeichnung. */
+const STRING_FAULT_SINCE = {
+  voll:  { '6|1': '2025-03-28', '9|5': '2025-03-28' },
+  eigen: {},
+};
 function isUnused(pl, wr, pv){
   if(pv===8) return true;                          // PV8 überall unbelegt
   const u = (STRING_UNUSED[pl]||{})[wr];
@@ -1520,6 +1538,36 @@ function isUnused(pl, wr, pv){
 /* String-Aufklappung: zeigt die einzelnen PV-Eingänge eines Wechselrichters */
 let wrSel=null;
 const _strDaily={};   // 'pl|wr' -> {t, map:{pv:energy_wh}} – Tagesenergie je String
+const _strHist={};    // 'pl|wr' -> {t, rows} – komplette Aufzeichnung (Verlust-Auswertung)
+async function loadStringHistory(pl, wr){
+  const key=pl+'|'+wr, c=_strHist[key];
+  if(c && Date.now()-c.t < 300000) return c.rows;
+  let rows=[]; if(Source.stringHistory){ try{ rows=await Source.stringHistory(pl, wr); }catch(_){ } }
+  _strHist[key]={t:Date.now(), rows}; return rows;
+}
+/* Verlust-Auswertung je String über ALLE aufgezeichneten Tage:
+   Ein String gilt an einem Tag als defekt, wenn seine Tagesenergie negativ ist
+   oder unter 50 % des Medians der gesunden Nachbar-Strings liegt (nur Tage mit
+   nennenswerter Sonne, Median > 2 kWh). Verlust = Differenz zum Median. */
+function analyzeStringLoss(pl, wr){
+  const c=_strHist[pl+'|'+wr]; if(!c||!c.rows||!c.rows.length) return null;
+  const byTag={};
+  c.rows.forEach(r=>{ if(isUnused(pl,wr,r.pv)) return; (byTag[r.tag]=byTag[r.tag]||[]).push(r); });
+  const tags=Object.keys(byTag).sort(); if(!tags.length) return null;
+  const per={};
+  tags.forEach(tag=>{
+    const rows=byTag[tag];
+    const pos=rows.map(r=>r.energy_wh||0).filter(e=>e>0).sort((a,b)=>a-b);
+    const med=pos.length?pos[Math.floor(pos.length/2)]:0;
+    if(med<2000) return;                       // trüber Tag / kaum Sonne → nicht bewerten
+    rows.forEach(r=>{ const e=r.energy_wh||0;
+      if(e<0 || e<med*0.5){
+        const p=per[r.pv]=per[r.pv]||{faultDays:0,lostWh:0,first:tag};
+        p.faultDays++; p.lostWh+=Math.max(0,med-e); p.last=tag;
+      } });
+  });
+  return { per, recFrom:tags[0], recTo:tags[tags.length-1], recDays:tags.length };
+}
 async function loadStringDaily(pl, wr){
   const key=pl+'|'+wr, c=_strDaily[key];
   if(c && Date.now()-c.t < 120000) return c.map;
@@ -1577,7 +1625,27 @@ function renderStrings(pl, wr){
   const eday=Object.values(dmap).reduce((a,b)=>a+(b||0),0);
   const dayTxt=eday?` · heute ${nf1.format(eday/1000)} kWh`:'';
   const sollTxt=` · Soll ${nf1.format(nomW*show.length/1000)} kWp`;   // WR-Gesamt-Soll (Summe der Strings)
-  host.innerHTML=`<div class="wrs-card"><div class="wrs-head"><span>${plantName} · WR ${wr}</span><small>${show.length} Strings · ${nf0.format(sum)} W${sollTxt}${dayTxt}</small></div>${rows}</div>`;
+  // Verlust-Auswertung: wie lange defekt + wieviel Verlust (aus der Aufzeichnung, ggf. hochgerechnet)
+  let lossHtml='';
+  const an=analyzeStringLoss(pl, wr);
+  if(an){
+    const fmtDe=t=>{const p=t.split('-');return p[2]+'.'+p[1]+'.'+p[0];};
+    const tarif=pl==='voll'?CONFIG.feedTariff.voll:CONFIG.feedTariff.eigen;
+    Object.keys(an.per).sort((a,b)=>a-b).forEach(pv=>{
+      const p=an.per[pv], kwh=p.lostWh/1000, eur=kwh*tarif;
+      let extra='';
+      const since=(STRING_FAULT_SINCE[pl]||{})[wr+'|'+pv];
+      if(since && p.faultDays>0){
+        const days=Math.max(1, Math.round((new Date(an.recTo)-new Date(since))/864e5)+1);
+        const tot=kwh/p.faultDays*days, teur=tot*tarif;
+        extra=`<br>bekannt seit <b>${fmtDe(since)}</b> (FusionSolar) → hochgerechnet über ${nf0.format(days)} Tage: <b>~${nf0.format(tot)} kWh · ~${nf0.format(teur)} €</b>`;
+      }
+      lossHtml+=`<div class="wrs-loss"><b>⚠ PV${pv} · Verlust-Auswertung</b><br>`
+        +`defekt an <b>${p.faultDays}</b> von ${an.recDays} aufgezeichneten Tagen (Aufzeichnung seit ${fmtDe(an.recFrom)})<br>`
+        +`aufgezeichneter Verlust: <b>${nf1.format(kwh)} kWh · ~${nf1.format(eur)} €</b>${extra}</div>`;
+    });
+  }
+  host.innerHTML=`<div class="wrs-card"><div class="wrs-head"><span>${plantName} · WR ${wr}</span><small>${show.length} Strings · ${nf0.format(sum)} W${sollTxt}${dayTxt}</small></div>${rows}${lossHtml}</div>`;
 }
 
 function paint(s,first){
@@ -1720,7 +1788,9 @@ document.getElementById('refreshBtn').addEventListener('click',refresh);
 
 /* Dach-Draufsicht: Wechselrichter (oder Störungs-Eintrag) antippen → Strings aufklappen */
 async function openStrings(pl, wr){
-  renderStrings(pl, wr); await loadStringDaily(pl, wr); renderStrings(pl, wr);
+  renderStrings(pl, wr);
+  await loadStringDaily(pl, wr); await loadStringHistory(pl, wr);   // Tageswerte + Verlust-Historie
+  renderStrings(pl, wr);
   const sp=document.getElementById('wrStrings'); if(sp) sp.scrollIntoView({behavior:'smooth', block:'center'});
 }
 (function(){ const roof=document.getElementById('wrRoof'); if(roof)
