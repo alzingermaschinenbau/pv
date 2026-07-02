@@ -523,7 +523,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v72</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v73</span></p>
 
 </main>
 
@@ -1601,7 +1601,7 @@ function paint(s,first){
     document.getElementById('hc-rows').innerHTML=hc.slice().sort((a,b)=>b.lost-a.lost).slice(0,12).map(e=>{
       const zeit=(e.quelle==='5min'&&e.von)?e.von+'–'+e.bis:'<small>~ Tag</small>';
       const dauer=(e.dauer!=null)?nf1.format(e.dauer)+' h':'<small>–</small>';
-      return `<tr><td>${e.date.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'})}</td><td>${e.plant} <small>☀${e.sun}%</small></td><td>${zeit}</td><td>${dauer}</td><td class="r">${nf0.format(e.lost)}</td></tr>`;
+      return `<tr><td>${e.date.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'})}${weatherTxt(dKey(e.date))}</td><td>${e.plant} <small>☀${e.sun}%</small></td><td>${zeit}</td><td>${dauer}</td><td class="r">${nf0.format(e.lost)}</td></tr>`;
     }).join('');}
 
   if(CONFIG.mode==='supabase'){document.getElementById('srcbadge').textContent='Supabase · live';document.getElementById('livelabel').textContent='Live';}
@@ -1671,6 +1671,36 @@ window.addEventListener('scroll',clearChartTips,{passive:true});
 document.addEventListener('touchend',clearChartTips,{passive:true});
 
 /* ============================================================
+   WETTER AM STANDORT (Open-Meteo, kostenlos, ohne Schlüssel)
+   Schierling ~48.825 N / 12.152 O · je Tag: Sonnenstunden, Regen, Bewölkung.
+   Historie über die Archiv-API, die letzten ~3 Monate über die Forecast-API.
+   ============================================================ */
+const _weather = { map:{}, from:null, to:null, loading:false };
+async function ensureWeather(from, to){
+  if(_weather.loading) return _weather.map;
+  if(_weather.from && _weather.from<=from && _weather.to>=to) return _weather.map;
+  _weather.loading = true;
+  try{
+    const base='latitude=48.825&longitude=12.152&daily=sunshine_duration,precipitation_sum,cloud_cover_mean&timezone=Europe%2FBerlin';
+    const merge=j=>{ const d=j&&j.daily; if(!d||!d.time) return;
+      d.time.forEach((t,k)=>{ _weather.map[t]={ sun:+(((d.sunshine_duration||[])[k]||0)/3600).toFixed(1),
+        rain:+(((d.precipitation_sum||[])[k]||0)).toFixed(1), cloud:Math.round((d.cloud_cover_mean||[])[k]||0) }; }); };
+    const dHist=new Date(); dHist.setDate(dHist.getDate()-6); const histEnd=dKey(dHist);   // Archiv hat ~5 Tage Verzug
+    if(from < histEnd){
+      const r=await fetch(`https://archive-api.open-meteo.com/v1/archive?${base}&start_date=${from}&end_date=${histEnd<to?histEnd:to}`);
+      if(r.ok) merge(await r.json());
+    }
+    const r2=await fetch(`https://api.open-meteo.com/v1/forecast?${base}&past_days=92&forecast_days=1`);
+    if(r2.ok) merge(await r2.json());
+    _weather.from=from; _weather.to=to;
+  }catch(_){ }
+  _weather.loading=false;
+  return _weather.map;
+}
+function weatherTxt(tag){ const w=_weather.map[tag]; if(!w) return '';
+  return `<small style="display:block;color:var(--muted-2);font-weight:600">☀ ${nf1.format(w.sun)} h · 🌧 ${nf1.format(w.rain)} mm</small>`; }
+
+/* ============================================================
    AUSWERTUNG / PDF-BERICHT
    ============================================================ */
 let reportGran='months', _reportInit=false;
@@ -1690,12 +1720,15 @@ function renderReport(){
   const neg=(lastSnap.negDaily||[]).filter(e=>inRange(e.tag));
   const tV=CONFIG.feedTariff.voll;
   const B=new Map();
-  const add=(dt,fn)=>{ const [k,l]=repBucket(dt,reportGran); const o=B.get(k)||{label:l,voll:0,eigen:0,lost:0,neg:0}; fn(o); B.set(k,o); };
+  const add=(dt,fn)=>{ const [k,l]=repBucket(dt,reportGran); const o=B.get(k)||{label:l,voll:0,eigen:0,lost:0,neg:0,sunh:0,rain:0}; fn(o); B.set(k,o); };
   days.forEach(d=>add(d.date,o=>{o.voll+=d.voll||0;o.eigen+=d.eigen||0;}));
   hc.forEach(e=>add(e.date,o=>{o.lost+=e.lost||0;}));
   neg.forEach(e=>add(new Date(e.tag+'T12:00:00'),o=>{o.neg+=e.neg_h||0;}));
+  // Wetter je Tag (Open-Meteo) in dieselben Zeiträume einsortieren
+  Object.keys(_weather.map).forEach(tag=>{ if(!inRange(tag)) return; const w=_weather.map[tag];
+    add(new Date(tag+'T12:00:00'),o=>{o.sunh+=w.sun||0;o.rain+=w.rain||0;}); });
   const rows=[...B.entries()].sort((a,b)=>a[0]<b[0]?-1:1).map(e=>e[1]);
-  const tot=rows.reduce((a,r)=>({voll:a.voll+r.voll,eigen:a.eigen+r.eigen,lost:a.lost+r.lost,neg:a.neg+r.neg}),{voll:0,eigen:0,lost:0,neg:0});
+  const tot=rows.reduce((a,r)=>({voll:a.voll+r.voll,eigen:a.eigen+r.eigen,lost:a.lost+r.lost,neg:a.neg+r.neg,sunh:a.sunh+r.sunh,rain:a.rain+r.rain}),{voll:0,eigen:0,lost:0,neg:0,sunh:0,rain:0});
   const fmtD=s=>{const p=s.split('-');return p[2]+'.'+p[1]+'.'+p[0];};
   const gname={days:'Tag',weeks:'Woche',months:'Monat',years:'Jahr'}[reportGran];
   const lv=hc.filter(e=>e.plantKey==='voll').length, le=hc.filter(e=>e.plantKey==='eigen').length;
@@ -1712,9 +1745,9 @@ function renderReport(){
     <div class="rep-kpi"><div class="k">Negativpreis-Stunden</div><div class="v">${nf1.format(tot.neg)} <small style="font-weight:600;color:var(--muted)">Std.</small></div></div>
   </div>
   <div class="rep-sec">Ertrag, Abregelung, Negativpreis & Vergütung pro ${gname}</div>
-  <div class="rep-tblwrap"><table class="tbl"><thead><tr><th>${gname}</th><th>Voll kWh</th><th>Eigen kWh</th><th>Entgangen</th><th>Neg. Std.</th><th>Verg. €</th></tr></thead><tbody>`;
-  rows.forEach(r=>{ h+=`<tr><td>${r.label}</td><td>${r0(r.voll)}</td><td>${r0(r.eigen)}</td><td>${r.lost?r0(r.lost):'–'}</td><td>${r.neg?nf1.format(r.neg):'–'}</td><td>${eur(r.voll*tV)}</td></tr>`; });
-  h+=`<tr class="sum"><td>Summe</td><td>${r0(tot.voll)}</td><td>${r0(tot.eigen)}</td><td>${r0(tot.lost)}</td><td>${nf1.format(tot.neg)}</td><td>${eur(tot.voll*tV)}</td></tr></tbody></table></div>
+  <div class="rep-tblwrap"><table class="tbl"><thead><tr><th>${gname}</th><th>Voll kWh</th><th>Eigen kWh</th><th>Entgangen</th><th>Neg. Std.</th><th>☀ Std.</th><th>🌧 mm</th><th>Verg. €</th></tr></thead><tbody>`;
+  rows.forEach(r=>{ h+=`<tr><td>${r.label}</td><td>${r0(r.voll)}</td><td>${r0(r.eigen)}</td><td>${r.lost?r0(r.lost):'–'}</td><td>${r.neg?nf1.format(r.neg):'–'}</td><td>${r.sunh?r0(r.sunh):'–'}</td><td>${r.rain!=null&&r.sunh?r0(r.rain):'–'}</td><td>${eur(r.voll*tV)}</td></tr>`; });
+  h+=`<tr class="sum"><td>Summe</td><td>${r0(tot.voll)}</td><td>${r0(tot.eigen)}</td><td>${r0(tot.lost)}</td><td>${nf1.format(tot.neg)}</td><td>${r0(tot.sunh)}</td><td>${r0(tot.rain)}</td><td>${eur(tot.voll*tV)}</td></tr></tbody></table></div>
   <div class="rep-sec">EEG-Regelung & Hinweise</div>
   <p class="finehint">Volleinspeiser: ${EEG_RULE.voll.name} (Inbetriebnahme ${EEG_RULE.voll.inbetriebnahme}).<br>
   Eigenverbrauch: ${EEG_RULE.eigen.name} (Inbetriebnahme ${EEG_RULE.eigen.inbetriebnahme}).<br>
@@ -1823,6 +1856,8 @@ function buildStringReportHTML(rows, from, to){
 async function start(){
   let s;try{s=await Source.snapshot();}catch(e){document.getElementById('livelabel').textContent='Demo';s=await Demo.snapshot();}
   buildCharts(s);paint(s,true);
+  // Wetter am Standort nachladen (Sonne/Regen je Tag) → Verluste-Liste & Bericht auffrischen
+  ensureWeather('2024-01-01', dKey(new Date())).then(()=>{ if(lastSnap){ try{ paint(lastSnap,false); renderReport(); }catch(_){} } });
   setInterval(tickClock,1000);tickClock();
   const every=CONFIG.mode==='supabase'?10000:3000;
   setInterval(async()=>{let u;try{u=await Source.snapshot();}catch(_){u=await Demo.snapshot();}paint(u,false);
