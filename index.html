@@ -522,7 +522,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v69</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v70</span></p>
 
 </main>
 
@@ -1176,6 +1176,9 @@ function countUp(el,target,dur=900){const start=performance.now();const from=par
 
 function greeting(h){return h<11?'Guten Morgen':h<17?'Guten Tag':h<22?'Guten Abend':'Gute Nacht';}
 function headline(s){const tot=s.voll.kw+s.eigen.kw, peak=s.voll.kwp+s.eigen.kwp;
+  // Eine Anlage liefert ~0, die andere produziert (= Sonne da) → abgeregelt/abgeschaltet
+  if(s.eigen.kw>5 && s.voll.kw<3) return 'Volleinspeiser <span class="r">abgeschaltet / abgeregelt</span> – Eigenverbrauch läuft.';
+  if(s.voll.kw>5 && s.eigen.kw<3) return 'Eigenverbrauch <span class="r">abgeschaltet / abgeregelt</span> – Volleinspeiser läuft.';
   if(s.spot&&s.spot.now<0&&s.spot.feedTot[s.curve.nowIdx]>1) return 'Achtung: <span class="r">Negativpreis</span> bei Einspeisung.';
   if(tot<peak*0.03) return 'Anlagen aktuell <span class="r">im Standby</span>.';
   if(tot>=peak*0.4) return 'Beide Anlagen <span class="r">speisen ein</span>.';
