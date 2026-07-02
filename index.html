@@ -522,7 +522,7 @@
     <div id="reportArea" style="margin-top:16px"></div>
   </div>
 
-  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v66</span></p>
+  <p class="finehint" style="text-align:center;margin:20px 0 6px">Datenquelle: <b id="srcbadge">Demo-Daten</b> · Aktualisierung alle 10&nbsp;Sek. · <span id="livelabel">Demo</span> · <span class="num">v67</span></p>
 
 </main>
 
@@ -675,6 +675,8 @@ const Demo={
              quote:pvDay>0?self/pvDay*100:0,autarkie:loadDay>0?self/loadDay*100:0,autarkieYear:58},
       curve:{labels:Array.from({length:N},(_,k)=>{const m=k*STEP;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}),
              voll:vollC,eigen:eigenC,load:loadC,nowIdx:i},
+      curveMin:(()=>{const M=1440,exp=a=>Array.from({length:M},(_,mi)=>{const f=mi/STEP,i0=Math.floor(f),i1=Math.min(a.length-1,i0+1),t=f-i0;return (a[i0]||0)*(1-t)+(a[i1]||0)*t;});
+             return{labels:Array.from({length:M},(_,k)=>String(Math.floor(k/60)).padStart(2,'0')+':'+String(k%60).padStart(2,'0')),voll:exp(vollC),eigen:exp(eigenC),load:exp(loadC),nowIdx:i*STEP};})(),
       daily:daily30(), dailyAll:daily30(), monthly:monthly12(),
       yearly:[{label:'2023',voll:892000,eigen:486000},{label:'2024',voll:586435,eigen:328485},{label:'2025',voll:611000,eigen:341000},{label:'2026',voll:298000,eigen:162000}],
       spot:{price:spotC,feedTot,
@@ -893,6 +895,25 @@ const Supa = {
       actual: r.actual_kwh || 0, expected: r.expected_kwh || 0, lost: r.lost_kwh || 0, sun: r.sun_pct || 0,
       dauer: r.dauer_h, von: r.von, bis: r.bis, quelle: r.quelle }));
 
+    // Tagesverlauf im 1-Minuten-Takt aus pv_samples – separat gecacht (~1 Min),
+    // damit nicht bei jedem 10-Sek-Tick die Tagesrohdaten neu geladen werden.
+    const nowIdxMin = now.getHours()*60 + now.getMinutes();
+    let curveMin = _slowCache.curveMin;
+    if(!curveMin || (Date.now() - (_slowCache.curveMinTs || 0)) > 55000){
+      const p2 = n => String(n).padStart(2,'0');
+      const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0,0,0).toISOString();
+      const sm = await this._q(`pv_samples?ts=gte.${encodeURIComponent(dayStart)}&select=plant,p_kw,load_kw,ts&order=ts.asc&limit=6000`).catch(() => []);
+      const M = 1440, vM = new Array(M).fill(0), eM = new Array(M).fill(0), lM = new Array(M).fill(0);
+      (sm || []).forEach(r => { const d = new Date(r.ts); const mi = d.getHours()*60 + d.getMinutes(); if(mi < 0 || mi >= M) return;
+        if(r.plant === 'voll'){ vM[mi] = r.p_kw || 0; }
+        else if(r.plant === 'eigen'){ eM[mi] = r.p_kw || 0; lM[mi] = r.load_kw || 0; } });
+      const lblM = Array.from({ length: M }, (_, k) => p2(Math.floor(k/60)) + ':' + p2(k%60));
+      curveMin = { labels: lblM, voll: vM, eigen: eM, load: lM, nowIdx: nowIdxMin };
+      _slowCache.curveMin = curveMin; _slowCache.curveMinTs = Date.now();
+    } else {
+      curveMin = { ...curveMin, nowIdx: nowIdxMin };   // Jetzt-Linie zwischen den Fetches live weiterrücken
+    }
+
     return {
       now, liveTs,
       voll:  { kw: v.p_kw || 0, day: vDay, month: sumMon('voll'), year: sumYr('voll'), kwp: CONFIG.plants.voll.kwp },
@@ -902,6 +923,7 @@ const Supa = {
                quote: eigenDay > 0 ? selfKwh / eigenDay * 100 : 0, autarkie: loadDay > 0 ? Math.min(100, selfKwh / loadDay * 100) : 0,
                autarkieYear },
       curve: { labels, voll: vollC, eigen: eigenC, load: loadC, nowIdx },
+      curveMin,
       inv: { voll: invBuild('voll', CONFIG.invNominal.voll), eigen: invBuild('eigen', CONFIG.invNominal.eigen) },
       daily: dailyArr,
       dailyAll,
@@ -966,11 +988,12 @@ let cDay,cBil,cEnergy,cPrice,cCurtail,cHistCurtail,cLoad,lastSnap,energyRange='d
     ctx.fillStyle=BLUE;ctx.beginPath();ctx.arc(x,a.bottom,6,0,Math.PI*2);ctx.fill();
     ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x,a.bottom,2.5,0,Math.PI*2);ctx.fill();ctx.restore();}};
 function buildCharts(s){
+  const dc=s.curveMin||s.curve;   // Tagesverlauf im 1-Min-Takt (Fallback: 15-Min)
   cDay=new Chart(document.getElementById('chartDay'),{type:'line',
-    data:{labels:s.curve.labels,datasets:[
-      {label:'Volleinspeiser',data:s.curve.voll,borderColor:RED,backgroundColor:'rgba(203,42,36,.10)',fill:true,tension:.4,pointRadius:0,borderWidth:2.4},
-      {label:'Eigenverbrauch',data:s.curve.eigen,borderColor:GOLD,backgroundColor:'rgba(200,136,31,.10)',fill:true,tension:.4,pointRadius:0,borderWidth:2.4},
-      {label:'Verbrauch',data:s.curve.load,borderColor:BLUE,borderDash:[6,4],fill:false,tension:.35,pointRadius:0,borderWidth:2.2},
+    data:{labels:dc.labels,datasets:[
+      {label:'Volleinspeiser',data:dc.voll,borderColor:RED,backgroundColor:'rgba(203,42,36,.10)',fill:true,tension:.25,pointRadius:0,borderWidth:2.2},
+      {label:'Eigenverbrauch',data:dc.eigen,borderColor:GOLD,backgroundColor:'rgba(200,136,31,.10)',fill:true,tension:.25,pointRadius:0,borderWidth:2.2},
+      {label:'Verbrauch',data:dc.load,borderColor:BLUE,borderDash:[6,4],fill:false,tension:.2,pointRadius:0,borderWidth:2},
     ]},
     options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
       plugins:{legend:{display:false},tooltip:{enabled:false}},
@@ -1112,7 +1135,7 @@ function renderLoad(range){
 
 /* Tagesverlauf: ziehbare Linie + Werte-Anzeige oben */
 function updateDayReadout(idx){
-  const c=lastSnap&&lastSnap.curve; if(!c||!cDay) return;
+  const c=lastSnap&&(lastSnap.curveMin||lastSnap.curve); if(!c||!cDay) return;
   const n=c.labels.length; if(!n) return;
   idx=Math.max(0,Math.min(n-1, idx|0));
   cDay.$scrubIdx=idx; cDay.update('none');
@@ -1131,7 +1154,7 @@ function setupDayScrub(){
     const idx=Math.round(cDay.scales.x.getValueForPixel(cx-r.left));
     updateDayReadout(idx); };
   const backToNow=()=>{ drag=false; cDay.$userScrub=false;   // Loslassen → Linie zurück auf „jetzt"
-    const c=lastSnap&&lastSnap.curve; if(c) updateDayReadout(c.nowIdx); };
+    const c=lastSnap&&(lastSnap.curveMin||lastSnap.curve); if(c) updateDayReadout(c.nowIdx); };
   cDay.canvas.addEventListener('pointerdown',e=>{drag=true;cDay.$userScrub=true;scrub(e);});
   window.addEventListener('pointermove',e=>{ if(drag) scrub(e); });
   window.addEventListener('pointerup',backToNow);
@@ -1410,7 +1433,7 @@ function renderStrings(pl, wr){
 function paint(s,first){
   lastSnap=s; renderEnergy(energyRange); if(cLoad) renderLoad(loadRange); renderInverters(s);
   // „Jetzt"-Linie folgt live der aktuellen Uhrzeit; nur beim aktiven Ziehen bleibt sie am Finger.
-  if(cDay) updateDayReadout(cDay.$userScrub && cDay.$scrubIdx!=null ? cDay.$scrubIdx : (s.curve?s.curve.nowIdx:0));
+  { const dc=s.curveMin||s.curve; if(cDay) updateDayReadout(cDay.$userScrub && cDay.$scrubIdx!=null ? cDay.$scrubIdx : (dc?dc.nowIdx:0)); }
   const total=s.voll.kw+s.eigen.kw, peak=s.voll.kwp+s.eigen.kwp;
   const h=s.now.getHours()+s.now.getMinutes()/60;
   document.getElementById('hi').textContent=greeting(h);
@@ -1739,7 +1762,7 @@ async function start(){
   setInterval(tickClock,1000);tickClock();
   const every=CONFIG.mode==='supabase'?10000:3000;
   setInterval(async()=>{let u;try{u=await Source.snapshot();}catch(_){u=await Demo.snapshot();}paint(u,false);
-    if(CONFIG.mode==='supabase'){cDay.data.datasets[0].data=u.curve.voll;cDay.data.datasets[1].data=u.curve.eigen;cDay.data.datasets[2].data=u.curve.load;cDay.update('none');
+    if(CONFIG.mode==='supabase'){const dc=u.curveMin||u.curve;cDay.data.labels=dc.labels;cDay.data.datasets[0].data=dc.voll;cDay.data.datasets[1].data=dc.eigen;cDay.data.datasets[2].data=dc.load;cDay.update('none');
       cPrice.data.labels=u.spot.labels48;cPrice.data.datasets[0].data=u.spot.feed48;cPrice.data.datasets[1].data=u.spot.price48;cPrice.$spot=u.spot;cPrice.update('none');}},every);
 }
 start();
